@@ -70,10 +70,13 @@ namespace assets {
       for(i=0;(i<trinum)&&!feof(file);i++){
         fread(data,12,4,file);
         fseek(file,2,SEEK_CUR);//extra flags we don't really care for
-        tris.push_back((mesh::meshtri){
+        mesh::meshtri tri{
           data[ 3],data[ 4],data[ 5],
           data[ 6],data[ 7],data[ 8],
-          data[ 9],data[10],data[11]});
+          data[ 9],data[10],data[11]};
+        if((tri.b-tri.a).cross(tri.c-tri.a).magnitude()>0.5){
+          tris.push_back(tri);
+        }
       }
     }else{//ascii stl
       unsigned short int l=strlen(&tmp[i]-5);
@@ -118,7 +121,10 @@ namespace assets {
         NSPACEL(i);WSPACEL(i);
         FEXPECTL("endloop",7)ORDIE("expected endloop");
         FEXPECTL("endfacet",8)ORDIE("expected endfacet");
-        tris.push_back((mesh::meshtri){x0,y0,z0,x1,y1,z1,x2,y2,z2});
+        mesh::meshtri tri{x0,y0,z0,x1,y1,z1,x2,y2,z2};
+        if((tri.b-tri.a).cross(tri.c-tri.a).magnitude()>0.5){
+          tris.push_back(tri);
+        }
       }
     }
     free(tmp);
@@ -161,7 +167,7 @@ namespace assets {
       }
     }else if(format==2){//ppm6
       wspace(file,tmp);
-      short int r,g,b,j;
+      short unsigned int r,g,b,j;
       while(!feof(file)&&(j<width*height)){
         fread(&r,1+(maxVal>255),1,file);
         fread(&g,1+(maxVal>255),1,file);
