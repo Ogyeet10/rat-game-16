@@ -210,7 +210,7 @@ namespace gui {
     fflush(debug);
   }
   void drawMTri(const meshtri& t, assets::texture_t& tex){
-    tri3<mesh_size> t1=t-camera_position;
+    meshtri t1=t-camera_position;
     rotateT(t1,camera_rotation.z);
     char v=(t1.a.x<1)+(t1.b.x<1)+(t1.c.x<1);
     if(v==3){return;}
@@ -219,13 +219,39 @@ namespace gui {
       t1.a=clipped[0];
       t1.b=clipped[1];
       t1.c=clipped[2];
+      vec3<mesh_size> a=(t.b-t.a).cross(t.c-t.a);
+      a=a*a;
+      t1.uv0=
+        (t.uv0*(float)({auto v=(t.b-t1.a).cross(t.c-t1.a);sqrt((v*v).total()/a.total());}))+//you can use statement expressions to make
+        (t.uv1*(float)({auto v=(t.c-t1.a).cross(t.a-t1.a);sqrt((v*v).total()/a.total());}))+//your code even less readable
+        (t.uv2*(float)({auto v=(t.a-t1.a).cross(t.b-t1.a);sqrt((v*v).total()/a.total());}));
+      t1.uv1=
+        (t.uv0*(float)({auto v=(t.b-t1.b).cross(t.c-t1.b);sqrt((v*v).total()/a.total());}))+
+        (t.uv1*(float)({auto v=(t.c-t1.b).cross(t.a-t1.b);sqrt((v*v).total()/a.total());}))+
+        (t.uv2*(float)({auto v=(t.a-t1.b).cross(t.b-t1.b);sqrt((v*v).total()/a.total());}));
+      t1.uv2=
+        (t.uv0*(float)({auto v=(t.b-t1.c).cross(t.c-t1.c);sqrt((v*v).total()/a.total());}))+
+        (t.uv1*(float)({auto v=(t.c-t1.c).cross(t.a-t1.c);sqrt((v*v).total()/a.total());}))+
+        (t.uv2*(float)({auto v=(t.a-t1.c).cross(t.b-t1.c);sqrt((v*v).total()/a.total());}));
       if(clipped[3].x!=0.0f){
-        meshtri t2=t;
-        t2.a=clipped[2];
-        t2.b=clipped[3];
-        t2.c=clipped[0];
+        meshtri t2{
+          clipped[2],
+          clipped[3],
+          clipped[0]};
+        t2.uv0=
+          (t.uv0*(float)({auto v=(t.b-t2.a).cross(t.c-t2.a);sqrt((v*v).total()/a.total());}))+//you can use statement expressions to make
+          (t.uv1*(float)({auto v=(t.c-t2.a).cross(t.a-t2.a);sqrt((v*v).total()/a.total());}))+//your code even less readable
+          (t.uv2*(float)({auto v=(t.a-t2.a).cross(t.b-t2.a);sqrt((v*v).total()/a.total());}));
+        t2.uv1=
+          (t.uv0*(float)({auto v=(t.b-t2.b).cross(t.c-t2.b);sqrt((v*v).total()/a.total());}))+
+          (t.uv1*(float)({auto v=(t.c-t2.b).cross(t.a-t2.b);sqrt((v*v).total()/a.total());}))+
+          (t.uv2*(float)({auto v=(t.a-t2.b).cross(t.b-t2.b);sqrt((v*v).total()/a.total());}));
+        t2.uv2=
+          (t.uv0*(float)({auto v=(t.b-t2.c).cross(t.c-t2.c);sqrt((v*v).total()/a.total());}))+
+          (t.uv1*(float)({auto v=(t.c-t2.c).cross(t.a-t2.c);sqrt((v*v).total()/a.total());}))+
+          (t.uv2*(float)({auto v=(t.a-t2.c).cross(t.b-t2.c);sqrt((v*v).total()/a.total());}));
         drawTri(t2, t.uv0, t.uv1, t.uv2, tex);
-        }
+      }
       free(clipped);
     }
     drawTri(t1, t.uv0, t.uv1, t.uv2, tex);//merge uvs into tri2<float>
