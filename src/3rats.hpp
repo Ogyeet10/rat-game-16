@@ -201,13 +201,13 @@ namespace gui {
             }
             if(logmisc){
               // fprintf(debug,"(%u,%u,%f),",x,y,depth);
-              fprintf(debug,"(%u,%u,%u),",x,y,depth_buffer[toSSPI(x,y)]);
+              // fprintf(debug,"(%u,%u,%u),",x,y,depth_buffer[toSSPI(x,y)]);
             }
           }
         }
       }
     }
-    fflush(debug);
+    // fflush(debug);
   }
   void drawMTri(const meshtri& t, assets::texture_t& tex){
     meshtri t1=t-camera_position;
@@ -216,45 +216,65 @@ namespace gui {
     if(v==3){return;}
     if(v!=0){
       vec3<mesh_size>* clipped=clipTriX(t1,1.0f);//optimize to reuse
-      t1.a=clipped[0];
-      t1.b=clipped[1];
-      t1.c=clipped[2];
-      vec3<mesh_size> a=(t.b-t.a).cross(t.c-t.a);
-      a=a*a;
-      t1.uv0=
-        (t.uv0*(float)({auto v=(t.b-t1.a).cross(t.c-t1.a);sqrt((v*v).total()/a.total());}))+//you can use statement expressions to make
-        (t.uv1*(float)({auto v=(t.c-t1.a).cross(t.a-t1.a);sqrt((v*v).total()/a.total());}))+//your code even less readable
-        (t.uv2*(float)({auto v=(t.a-t1.a).cross(t.b-t1.a);sqrt((v*v).total()/a.total());}));
-      t1.uv1=
-        (t.uv0*(float)({auto v=(t.b-t1.b).cross(t.c-t1.b);sqrt((v*v).total()/a.total());}))+
-        (t.uv1*(float)({auto v=(t.c-t1.b).cross(t.a-t1.b);sqrt((v*v).total()/a.total());}))+
-        (t.uv2*(float)({auto v=(t.a-t1.b).cross(t.b-t1.b);sqrt((v*v).total()/a.total());}));
-      t1.uv2=
-        (t.uv0*(float)({auto v=(t.b-t1.c).cross(t.c-t1.c);sqrt((v*v).total()/a.total());}))+
-        (t.uv1*(float)({auto v=(t.c-t1.c).cross(t.a-t1.c);sqrt((v*v).total()/a.total());}))+
-        (t.uv2*(float)({auto v=(t.a-t1.c).cross(t.b-t1.c);sqrt((v*v).total()/a.total());}));
+      meshtri t2{
+        clipped[0],
+        clipped[1],
+        clipped[2]};
+      vec3<mesh_size> a1=(t1.c-t1.a).cross(t1.b-t1.a);//really this is double the area but we don't care
+      mesh_size a2=(a1*a1).total();
+      vec3<mesh_size> a=(t1.b-t2.a).cross(t1.c-t2.a);//because it's ratios of areas
+      vec3<mesh_size> b=(t1.c-t2.a).cross(t1.a-t2.a);
+      vec3<mesh_size> c=(t1.a-t2.a).cross(t1.b-t2.a);
+      t2.uv0=
+        t1.uv0*(float)sqrt((a*a).total()/a2)+
+        t1.uv1*(float)sqrt((b*b).total()/a2)+
+        t1.uv2*(float)sqrt((c*c).total()/a2);
+      a=(t1.b-t2.b).cross(t1.c-t2.b);
+      b=(t1.c-t2.b).cross(t1.a-t2.b);
+      c=(t1.a-t2.b).cross(t1.b-t2.b);
+      t2.uv1=
+        t1.uv0*(float)sqrt((a*a).total()/a2)+
+        t1.uv1*(float)sqrt((b*b).total()/a2)+
+        t1.uv2*(float)sqrt((c*c).total()/a2);
+      a=(t1.b-t2.c).cross(t1.c-t2.c);
+      b=(t1.c-t2.c).cross(t1.a-t2.c);
+      c=(t1.a-t2.c).cross(t1.b-t2.c);
+      t2.uv2=
+        t1.uv0*(float)sqrt((a*a).total()/a2)+
+        t1.uv1*(float)sqrt((b*b).total()/a2)+
+        t1.uv2*(float)sqrt((c*c).total()/a2);
+      if(logmisc){fprintf(debug,"polygon((%f,%f),(%f,%f),(%f,%f)),",t2.uv0.x,t2.uv0.y,t2.uv1.x,t2.uv1.y,t2.uv2.x,t2.uv2.y);fflush(debug);}
+      drawTri(t2,t2.uv0,t2.uv1,t2.uv2,tex);
       if(clipped[3].x!=0.0f){
-        meshtri t2{
+        meshtri t3{
           clipped[2],
           clipped[3],
           clipped[0]};
-        t2.uv0=
-          (t.uv0*(float)({auto v=(t.b-t2.a).cross(t.c-t2.a);sqrt((v*v).total()/a.total());}))+//you can use statement expressions to make
-          (t.uv1*(float)({auto v=(t.c-t2.a).cross(t.a-t2.a);sqrt((v*v).total()/a.total());}))+//your code even less readable
-          (t.uv2*(float)({auto v=(t.a-t2.a).cross(t.b-t2.a);sqrt((v*v).total()/a.total());}));
-        t2.uv1=
-          (t.uv0*(float)({auto v=(t.b-t2.b).cross(t.c-t2.b);sqrt((v*v).total()/a.total());}))+
-          (t.uv1*(float)({auto v=(t.c-t2.b).cross(t.a-t2.b);sqrt((v*v).total()/a.total());}))+
-          (t.uv2*(float)({auto v=(t.a-t2.b).cross(t.b-t2.b);sqrt((v*v).total()/a.total());}));
-        t2.uv2=
-          (t.uv0*(float)({auto v=(t.b-t2.c).cross(t.c-t2.c);sqrt((v*v).total()/a.total());}))+
-          (t.uv1*(float)({auto v=(t.c-t2.c).cross(t.a-t2.c);sqrt((v*v).total()/a.total());}))+
-          (t.uv2*(float)({auto v=(t.a-t2.c).cross(t.b-t2.c);sqrt((v*v).total()/a.total());}));
-        drawTri(t2, t.uv0, t.uv1, t.uv2, tex);
+      a=(t1.b-t3.a).cross(t1.c-t3.a);
+      b=(t1.c-t3.a).cross(t1.a-t3.a);
+      c=(t1.a-t3.a).cross(t1.b-t3.a);
+      t3.uv0=
+        t1.uv0*(float)sqrt((a*a).total()/a2)+
+        t1.uv1*(float)sqrt((b*b).total()/a2)+
+        t1.uv2*(float)sqrt((c*c).total()/a2);
+      a=(t1.b-t3.b).cross(t1.c-t3.b);
+      b=(t1.c-t3.b).cross(t1.a-t3.b);
+      c=(t1.a-t3.b).cross(t1.b-t3.b);
+      t3.uv1=
+        t1.uv0*(float)sqrt((a*a).total()/a2)+
+        t1.uv1*(float)sqrt((b*b).total()/a2)+
+        t1.uv2*(float)sqrt((c*c).total()/a2);
+      a=(t1.b-t3.c).cross(t1.c-t3.c);
+      b=(t1.c-t3.c).cross(t1.a-t3.c);
+      c=(t1.a-t3.c).cross(t1.b-t3.c);
+      t3.uv2=
+        t1.uv0*(float)sqrt((a*a).total()/a2)+
+        t1.uv1*(float)sqrt((b*b).total()/a2)+
+        t1.uv2*(float)sqrt((c*c).total()/a2);
+        drawTri(t3, t3.uv0, t3.uv1, t3.uv2, tex);
       }
       free(clipped);
-    }
-    drawTri(t1, t.uv0, t.uv1, t.uv2, tex);//merge uvs into tri2<float>
+    }else{drawTri(t1, t1.uv0, t1.uv1, t1.uv2, tex);/*merge uvs into tri2<float>*/}
   }
 }
 #endif
