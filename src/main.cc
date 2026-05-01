@@ -26,7 +26,23 @@ template<comp T,comp...U> T constexpr const max(T t, U...a){
 #include <assets.hpp>
 #include <r@@2e.hpp>
 #include <3rats.hpp>
-void a(void){exit(0);} void b(void){exit(1);}
+gui::text_t* text=new gui::text_t[3];//who cares
+gui::menu_t menu{};
+void a(){
+  text[0]={&gui::default_font,"thank you that's what i've been saying",38,gui::LEFT};
+  menu.textcount=1;
+  menu.btncount=0;
+}
+void b(){
+  text[0]={&gui::default_font,"you're wrong :thumbsdown:",25,gui::LEFT};
+  menu.textcount=1;
+  menu.btncount=0;
+}
+void c(){
+  text[0]={&gui::default_font,"you were supposed to pick yes or no...",38,gui::LEFT};
+  menu.textcount=1;
+  menu.btncount=0;
+}
 int main() {
   puts("\rRAT GAME 16");
   debug=fopen("./debug/debug.log","w");
@@ -35,23 +51,21 @@ int main() {
   assets::asset3d_t model0=assets::readAsset3d("./assets/poster.rgmdl");//ari i'm going to ear you
   assets::asset3d_t model1=assets::readAsset3d("./assets/base.rgmdl");
   puts("LOADING FONT");
-  gui::default_font=assets::readFont("./assets/font/1x1.rgft");
   assets::font_t font=assets::readFont("./assets/font/6x5.rgft");
+  assets::font_t font1=assets::readFont("./assets/font/3x3.rgft");
+  gui::default_font=assets::readFont("./assets/font/1x1.rgft");
   gui::init();
   unsigned char escapes=0;
   unsigned char rotamnt=16;
   float rotamntrad = (rotamnt/128.0f)*M_PI;
   float rottrck=0;
-  gui::text_t text[]={
-    {&font,"Rat Game 16!!",13,gui::LEFT},
-    {&gui::default_font,"The quick brown fox jumps over the lazy dog",43,gui::LEFT},
-    {&font,"Sphinxofblackquartz,hear my vow!",32,gui::LEFT},
-    {&gui::default_font,"there are menus now. does that count as a game mechanic",55,gui::LEFT}
-  };
-  // gui::text_t buttons[3]={{&gui::default_font,"yes",3,gui::CENTER},{&gui::default_font,"no",2,gui::CENTER},{&gui::default_font,"???",3,gui::RIGHT}};
-  // void (*funcs[3])()={&a,&b,NULL};
-  gui::menu_t menu{
-    80,24,{'-','-','|','|','+'},4,text,0,NULL,NULL
+  text[0]={&font,"Rat!!!!!!!!! Game, 16!!",23,gui::LEFT},
+  text[1]={&gui::default_font,"The quick brown fox jumps over the lazy dog. Sphinx of black quartz, hear my vow.",81,gui::LEFT};
+  text[2]={&gui::default_font,"there are menus now. they even have fancy fonts and text wrapping. does that count as a game mechanic?",102,gui::LEFT};
+  gui::text_t buttons[3]={{&font1,"yes",3,gui::CENTER},{&gui::default_font,"no",2,gui::CENTER},{&gui::default_font,"use left and right brackets to navigate up and down dialog options and enter to select",86,gui::RIGHT}};
+  void (*funcs[3])()={&a,&b,&c};
+  menu={
+    60,24,{'-','-','|','|','+'},3,text,3,buttons,funcs
   };
   gui::selected_menu=&menu;
   gui::selected_btn=0;
