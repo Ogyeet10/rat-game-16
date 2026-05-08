@@ -376,7 +376,7 @@ namespace assets {
   }
   font_t readFont(const char* name){//we could probably standardize systems of scanning files because lots of this code is reused
     DO(strlen(name)>=128){perror("file name too long");exit(1);}//but we only have 2 formats so that's not an issue rn
-    printf("loading asset %s:\n",name);
+    printf("loading asset %s:",name);
     FILE* file=fopen(name,"r");
     char* tmp=(char*)malloc(128);
     DO(!file)ORDIE("couldn't open asset file for read :(")
@@ -387,58 +387,80 @@ namespace assets {
     font_t out{};
     wspace(file,tmp);
     tmp[readUntil(file,tmp,'x')]='\0';getc(file);
-    out.sizex=atoi(tmp);
+    char x=atoi(tmp);
+    out.sizex=(unsigned char*)malloc(256);
+    memset(out.sizex,x,256);
     tmp[nspace(file,tmp)]='\0';
     out.sizey=atoi(tmp);
-    out.map=(char*)malloc(out.sizex*out.sizey*256);
-    memset(out.map,'#',out.sizex*out.sizey*256);
-    char* readTo=NULL;
+    printf("%ix%i\n",(*out.sizex?*out.sizex:0),out.sizey);
+    out.map=(char**)calloc(256,sizeof(char*));
     size_t amt=0;
+    unsigned char readTo=0;
     wspace(file,tmp);
     while(!feof(file)){
       unsigned int token_length=nspace(file,tmp);
-      DO(!token_length)ORTHENDIE(printf("%s\n",tmp),"bad tokens in asset")
+      DO(!token_length)ORTHENDIE(printf("\"%s\"\nat %i:",tmp,ftell(file)),"bad tokens in asset")
       if(token_length==14){
         if(!memcmp(tmp,"alphabet_upper",14)){
-          amt=26;readTo=UPPER(out);
+          amt=26;readTo='A';
         }else if(!memcmp(tmp,"alphabet_lower",14)){
-          amt=26;readTo=LOWER(out);
+          amt=26;readTo='a';
         }
       }else if(token_length==7){
         if(!memcmp(tmp,"special",7)){
-          amt=32;readTo=SPECIAL(out);
+          amt=33;readTo=' ';
         }
       }else if(token_length==8){
         if(!memcmp(tmp,"special2",8)){
-          amt=6;readTo=SPECIAL2(out);
+          amt=6;readTo='[';
         }else if(!memcmp(tmp,"special3",8)){
-          amt=4;readTo=SPECIAL3(out);
+          amt=4;readTo='{';
         }
       }
       DO(readTo){
         DO(getc(file)!='\n')ORTHENDIE(printf("expected newline at %i after %.*s!\n",ftell(file),token_length,tmp),"bad read")
+        unsigned int total=0;
+        printf("%.*s:",token_length,tmp);
+        if(!out.sizex[readTo]){
+          for(unsigned int i=0;i<amt;i++){
+            total+=(out.sizex[readTo+i]=readUntil(file,tmp,'.')+1);getc(file);
+            printf("%i,",out.sizex[readTo+i],out.sizex[readTo+i]);
+          }
+          printf("\b:%i\n",total);
+          DO(getc(file)!='\n')ORTHENDIE(printf("expected newline at %i after width!\n",ftell(file)),"bad read")
+        }else{
+          puts("\b ");
+        }
         for(unsigned int i=0;i<out.sizey;i++){
           for(unsigned int j=0;j<amt;j++){
-            DO((token_length=fread(&readTo[(j*out.sizex*out.sizey)+(i*out.sizex)],1,out.sizex,file))!=out.sizex)
+            if(!out.map[readTo+j]){out.map[readTo+j]=(char*)malloc(out.sizey*out.sizex[readTo+j]);}
+            DO((token_length=fread(&out.map[readTo+j][i*out.sizex[readTo+j]],1,out.sizex[readTo+j],file))!=out.sizex[readTo+j])
             ORTHENDIE(
               printf("did't get enough characters: %i/%i at %i:(%i,%i):%i\n",
                 token_length,out.sizex,ftell(file),j,i,amt)
               ,"bad read")
             DO(errno)ORDIE("unexpected error while reading");
-	    DO(ferror(file))ORTHENDIE(printf("error at %i!\n",ftell(file));,"unexpected error while reading");
-	    DO(feof(file))ORTHENDIE(printf("error at %i!\n",ftell(file));,"unexpected end of file");
+      	    DO(ferror(file))ORTHENDIE(printf("error at %i!\n",ftell(file));,"unexpected error while reading");
+      	    DO(feof(file))ORTHENDIE(printf("error at %i!\n",ftell(file));,"unexpected end of file");
           }
           getc(file);
         }
-      }else ORDIE("unknown token :E")
+      }else ORTHENDIE(printf("\"%.*s\":",token_length,tmp),"unknown token :E")
       wspace(file,tmp);
     }
-    memset(&out.map[out.sizex*out.sizey*(unsigned char)' '],' ',out.sizex*out.sizey);
-    if((*UPPER(out)!='#')&&(*LOWER(out)=='#')){
-      memcpy(LOWER(out),UPPER(out),26*out.sizex*out.sizey);
-    }else if((*UPPER(out)=='#')&&(*LOWER(out)!='#')){
-      memcpy(UPPER(out),LOWER(out),26*out.sizex*out.sizey);
+    if(out.map['a']&&!out.map['A']){
+      memcpy(&out.map['A'],&out.map['a'],26*sizeof(char*));
+      memcpy(&out.sizex['A'],&out.sizex['a'],26);
+    }else if(out.map['A']&&!out.map['a']){
+      memcpy(&out.map['a'],&out.map['A'],26*sizeof(char*));
+      memcpy(&out.sizex['a'],&out.sizex['A'],26);
     }
+    /*memset(&out.map[out.sizex*out.sizey*(unsigned char)' '],' ',out.sizex*out.sizey);
+    if((*UPPER(out)!=c)&&(*LOWER(out)==c)){
+      memcpy(LOWER(out),UPPER(out),26*out.sizex*out.sizey);
+    }else if((*UPPER(out)==c)&&(*LOWER(out)!=c)){
+      memcpy(UPPER(out),LOWER(out),26*out.sizex*out.sizey);
+    }*/
     fclose(file);
     free(tmp);
     return out;

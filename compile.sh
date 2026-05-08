@@ -40,3 +40,4 @@ fi
 rm log.txt
 echo compiled \:3
 ./a.out
+cat ./debug/debug.log
