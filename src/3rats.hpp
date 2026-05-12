@@ -11,20 +11,20 @@
 template<arith T> inline auto constexpr triarea(T x0,T y0,T x1,T y1,T x2,T y2){
   if constexpr(std::is_integral_v<T>){
     using sT=std::make_signed_t<T>;
-    return -((x0 * ((sT)y1-y2)) + (x1 * ((sT)y2-y0)) + (x2 * ((sT)y0-y1)));//these probably shouldn't be negative
-  }else{return -((x0 * (y1-y2)) + (x1 * (y2-y0)) + (x2 * (y0-y1)));}//but it still works so
+    return ((x0 * ((sT)y1-y2)) + (x1 * ((sT)y2-y0)) + (x2 * ((sT)y0-y1)));//these probably shouldn't be negative
+  }else{return ((x0 * (y1-y2)) + (x1 * (y2-y0)) + (x2 * (y0-y1)));}//but it still works so
 }
 namespace mesh {
-  unsigned int farplanex=8;
+  unsigned int farplanex=12;
   const char* charsbyopacity="$@MN%&E0K?UO^!;:,.";
   int opacitylength=18;
-  template<arith T> inline void rotate(T& axis_0,T& axis_1,char d){
+  template<arith T> constexpr void rotate(T& axis_0,T& axis_1,signed char d){
     float r1=cos(d/128.0*M_PI),r2=sin(d/128.0*M_PI);
     float axis_0_t=(axis_0*r1)-(axis_1*r2);
     axis_1=axis_1*r1+axis_0*r2;
     axis_0=axis_0_t;
   }
-  template<typename T> inline tri3<T> rotateT(tri3<T>& v,char d){
+  template<typename T> constexpr inline tri3<T> rotateT(tri3<T>& v,signed char d){
     rotate(v.a.x,v.a.y,d);rotate(v.b.x,v.b.y,d);rotate(v.c.x,v.c.y,d);
     return v;
   }
@@ -151,14 +151,15 @@ namespace gui {
   }
   void drawTri(const tri3<mesh_size>& t1, vec2<float> uv0, vec2<float> uv1, vec2<float> uv2, assets::texture_t& tex){
     mesh_size z0=t1.a.x,z1=t1.b.x,z2=t1.c.x;
+    printd("triangle((%f,%f,%f),(%f,%f,%f),(%f,%f,%f));polygon((%f,%f),(%f,%f),(%f,%f))",t1.a.x,t1.a.y,t1.a.z,t1.b.x,t1.b.y,t1.b.z,t1.c.x,t1.c.y,t1.c.z,uv0.x,uv0.y,uv1.x,uv1.y,uv2.x,uv2.y);
     signed short int
       x0=toSSPX(t1.a.y,z0),y0=toSSPY(t1.a.z,z0),
       x1=toSSPX(t1.b.y,z1),y1=toSSPY(t1.b.z,z1),
       x2=toSSPX(t1.c.y,z2),y2=toSSPY(t1.c.z,z2);
     scoord minx=max(min(x0,x1,x2),0),
            miny=max(min(y0,y1,y2),0),
-           maxx=min(max(x0,x1,x2),gui::term_dims.ws_col),
-           maxy=min(max(y0,y1,y2),gui::term_dims.ws_row);
+           maxx=min(max(x0,x1,x2,minx),gui::term_dims.ws_col),
+           maxy=min(max(y0,y1,y2,miny),gui::term_dims.ws_row);
     float area=triarea(
       SCAST(float,x0),SCAST(float,y0),
       SCAST(float,x1),SCAST(float,y1),

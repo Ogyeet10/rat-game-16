@@ -13,6 +13,7 @@
 #include <colors.hpp>
 // #include <assets.hpp>
 #include <ctype.h>
+#include <stdarg.h>
 #define DO(x) if(x)
 #define ORDIE(s) {::gui::stop(s);exit(1);}
 #define BRKST(X,Y) if(::gui::state&STATE_ ## X){Y ::gui::state&=~STATE_ ## X;} //did not want to write out if(state&whatever) like 80 times
@@ -21,6 +22,7 @@
 #define STATE_TBUF 0b00000100//which is lowkirkenuinely wild
 #define STATE_CBUF 0b00001000
 #define STATE_DBUF 0b00010000
+#define STATE_BBUF 0b00100000
 #define STATE_ICLR 0b10000000
 namespace gui {
   menu_t* selected_menu;
@@ -50,8 +52,25 @@ namespace gui {
   char* term_buffer=NULL;
   unsigned char* depth_buffer=NULL;
   color_t* color_buffer=NULL;
+#ifdef do_debug
+  char* debug_buffer=NULL;
+#endif
   scoord max_chars=0;
 
+  __attribute__((format (printf,1,2))) void dbprintf(const char* str, ...){
+    static unsigned long last_amt=0;
+    va_list args;
+    fwrite("\x1b[2J\x1b[0;0H\x1b[0m",1,10,stdout);
+    va_start(args,str);
+    last_amt=vfprintf(stdout,str,args);
+    va_end(args);
+    fflush(stdout);
+  }
+  #ifdef do_debug
+    #define printd(...) ::gui::dbprintf(__VA_ARGS__)
+  #else
+    #define printd
+  #endif
   int set_term_flags(tcflag_t fl,tcflag_t fi,tcflag_t fo){
     cur_term_state.c_lflag&=fl;
     cur_term_state.c_iflag&=fi;
@@ -72,12 +91,15 @@ namespace gui {
     BRKST(TBUF,if(term_buffer){free(term_buffer);term_buffer=NULL;max_chars=0;})
     BRKST(CBUF,if(color_buffer){free(color_buffer);color_buffer=NULL;})
     BRKST(DBUF,if(depth_buffer){free(depth_buffer);depth_buffer=NULL;})
+    #ifdef do_debug
+    BRKST(BBUF,if(debug_buffer){free(debug_buffer);debug_buffer=NULL;})
+    #endif
     if(err){perror(err);}
     state|=STATE_ICLR;
   }
   void stop() {stop(NULL);}
 
-  void sig_handler(int sig){
+  void sig_handler(int sig){//lowk forgot to make this part work but like who cares
     printf("bazinga%u",sig);
     FILE* g = fopen("log","w+");
     fprintf(g,"%u\n",sig);
@@ -114,13 +136,14 @@ namespace gui {
     //get some data about what the terminal looks like
     DO(ioctl(STDOUT_FILENO, TIOCGWINSZ, &term_dims))ORDIE("couldn't get terminal dimensions");
     max_chars=term_dims.ws_col*term_dims.ws_row;
-    DO((term_buffer=(char*)malloc(max_chars))==NULL)ORDIE("couldn't allocate for screen");//malloc because we clear it later with spaces instead of '\0'
-    state|=STATE_TBUF;
-    DO((color_buffer=(color_t*)malloc(max_chars*sizeof(color_t)))==NULL)ORDIE("couldn't allocate for colors");
-    state|=STATE_CBUF;
-    DO((depth_buffer=(unsigned char*)malloc(max_chars))==NULL)ORDIE("couldn't allocate for depth buffer");
-    state|=STATE_DBUF;
-    
+#define tryalloc(A,B,C,D) DO((A ## _buffer=(B)malloc(C))==NULL)ORDIE("couldn't allocate for " #A);state|=STATE_ ## D;
+    tryalloc(term,char*,max_chars,TBUF);
+    tryalloc(color,color_t*,max_chars,CBUF);
+    tryalloc(depth,unsigned char*,max_chars,DBUF);
+    #ifdef do_debug
+    tryalloc(debug,char*,term_dims.ws_col,BBUF);
+    #endif
+#undef tryalloc
     clear_scr();
     // struct sigaction t;
     // DO(sigaction(SIGTTOU,&t,NULL)==-1)ORDIE("couldn't examine action for ttou"); //double check things work later
@@ -267,7 +290,7 @@ namespace gui {
       color_buffer[toSSPI(x+1,y2)]=default_color;
       color_buffer[toSSPI(x+2,y2)]=default_color;
     }
-  }//*/
+  }
 
   void drawFrame(){
     DO(fwrite("\x1b[2J\x1b[0;0H\x1b[0m",1,10,stdout)<10)ORDIE("couldn't write control codes to terminal");

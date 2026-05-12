@@ -1,3 +1,4 @@
+// #define do_debug :3 //makes everything really slow
 #define VERSION "v0.0.2"
 #define PRINT_TRI3(B,T,F) fprintf(B,"triangle((%" #F ",%" #F ",%" #F "),(%" #F ",%" #F ",%" #F "),(%" #F ",%" #F ",%" #F ")),",T.a.x,T.a.y,T.a.z,T.b.x,T.b.y,T.b.z,T.c.x,T.c.y,T.c.z)
 #define PRINT_TRI2(B,T,F) fprintf(B,"polygon((%" #F ",%" #F "),(%" #F ",%" #F "),(%" #F ",%" #F ")),",T.a.x,T.a.y,T.b.x,T.b.y,T.c.x,T.c.y)
@@ -12,7 +13,7 @@ FILE* debug;
 typedef void (*function)(void);
 bool logmisc=false;
 template<typename T> concept arith=std::is_arithmetic_v<T>;
-template<typename T> concept comp =requires(T a,T b){a<b;a>b;a==b;};
+template<typename T> concept comp =requires(T a,T b){a<b;a>b;};
 template<comp T,comp U> T constexpr const min(T a,U b){return a<b?a:b;}
 template<comp T,comp U> T constexpr const max(T a,U b){return a<b?b:a;}
 template<comp T,comp...U> T constexpr const min(T t, U...a){
@@ -30,8 +31,7 @@ template<comp T,comp...U> T constexpr const max(T t, U...a){
 assets::font_t f_big;
 assets::font_t f_avatar;
 
-assets::asset3d_t poster;
-assets::asset3d_t base;
+assets::asset3d_t scene;
 
 gui::menu_t mainmenu;
 gui::menu_t pausemenu;
@@ -48,11 +48,8 @@ void drawWorld(){
   if(gamestate.paused){
     gui::putMenu(&pausemenu,0,0);
   }else{
-    for(unsigned int i=0;i<poster.mesh.tricount;i++){
-      gui::drawMTri(poster.mesh.tris[i],poster.texture);
-    }
-    for(unsigned int i=0;i<base.mesh.tricount;i++){
-      gui::drawMTri(base.mesh.tris[i],base.texture);
+    for(unsigned int i=0;i<scene.mesh.tricount;i++){
+      gui::drawMTri(scene.mesh.tris[i],scene.texture);
     }
   }
 }
@@ -73,8 +70,7 @@ void loadFonts(){
 }
 void loadModels(){
   puts("LOADING MODELS");
-  poster=assets::readAsset3d("./assets/poster.rgmdl");//ari i'm going to ear you
-  base  =assets::readAsset3d("./assets/base.rgmdl");
+  scene=assets::readAsset3d("./assets/newscene.rgmdl");//ari i'm going to ear you
 }
 void loadMenus(){
   mainmenu={
