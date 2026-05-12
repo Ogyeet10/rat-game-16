@@ -1,4 +1,4 @@
-#define RATATOUILLE_NCURSES
+#define colon three
 #define PRINT_TRI3(B,T,F) fprintf(B,"triangle((%" #F ",%" #F ",%" #F "),(%" #F ",%" #F ",%" #F "),(%" #F ",%" #F ",%" #F ")),",T.a.x,T.a.y,T.a.z,T.b.x,T.b.y,T.b.z,T.c.x,T.c.y,T.c.z)
 #define PRINT_TRI2(B,T,F) fprintf(B,"polygon((%" #F ",%" #F "),(%" #F ",%" #F "),(%" #F ",%" #F ")),",T.a.x,T.a.y,T.b.x,T.b.y,T.c.x,T.c.y)
 #define PRINT_TRI21(B,F)   fprintf(B,"polygon((%" #F ",%" #F "),(%" #F ",%" #F "),(%" #F ",%" #F ")),",x0,y0,x1,y1,x2,y2)
@@ -48,8 +48,7 @@ int main() {
   debug=fopen("./debug/debug.log","w");
   if(ferror(debug)||errno||!debug){perror("couldn't open debug log file :(");exit(1);}
   puts("LOADING MODELS");
-  assets::asset3d_t model0=assets::readAsset3d("./assets/poster.rgmdl");//ari i'm going to ear you
-  assets::asset3d_t model1=assets::readAsset3d("./assets/base.rgmdl");
+  assets::asset3d_t model=assets::readAsset3d("./assets/newscene.rgmdl");//ari i'm going to ear you
   puts("LOADING FONT");
   assets::font_t font=assets::readFont("./assets/font/6x5.rgft");
   assets::font_t font1=assets::readFont("./assets/font/3x3.rgft");
@@ -105,13 +104,10 @@ int main() {
     if(c){
       clock_t t=clock();
       gui::clear_scr();
-      for(short unsigned int i=0;i<model1.mesh.tricount;i++){
-        gui::drawMTri(model1.mesh.tris[i],model1.texture);
+      for(short unsigned int i=0;i<model.mesh.tricount;i++){
+        gui::drawMTri(model.mesh.tris[i],model.texture);
       }
-      for(short unsigned int i=0;i<model0.mesh.tricount;i++){
-        gui::drawMTri(model0.mesh.tris[i],model0.texture);
-      }
-      gui::putMenu(&menu,1,5);
+      // gui::putMenu(&menu,1,5);
       gui::drawFrame();
       clock_t t1=clock()-t;
       float s=t1/(float)CLOCKS_PER_SEC;

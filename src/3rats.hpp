@@ -11,20 +11,20 @@
 template<arith T> inline auto constexpr triarea(T x0,T y0,T x1,T y1,T x2,T y2){
   if constexpr(std::is_integral_v<T>){
     using sT=std::make_signed_t<T>;
-    return -((x0 * ((sT)y1-y2)) + (x1 * ((sT)y2-y0)) + (x2 * ((sT)y0-y1)));//these probably shouldn't be negative
-  }else{return -((x0 * (y1-y2)) + (x1 * (y2-y0)) + (x2 * (y0-y1)));}//but it still works so
+    return ((x0 * ((sT)y1-y2)) + (x1 * ((sT)y2-y0)) + (x2 * ((sT)y0-y1)));//these probably shouldn't be negative
+  }else{return ((x0 * (y1-y2)) + (x1 * (y2-y0)) + (x2 * (y0-y1)));}//but it still works so
 }
 namespace mesh {
   unsigned int farplanex=8;
   const char* charsbyopacity="$@MN%&E0K?UO^!;:,.";
   int opacitylength=18;
-  template<arith T> inline void rotate(T& axis_0,T& axis_1,char d){
+  template<arith T> constexpr void rotate(T& axis_0,T& axis_1,char d){
     float r1=cos(d/128.0*M_PI),r2=sin(d/128.0*M_PI);
     float axis_0_t=(axis_0*r1)-(axis_1*r2);
     axis_1=axis_1*r1+axis_0*r2;
     axis_0=axis_0_t;
   }
-  template<typename T> inline tri3<T> rotateT(tri3<T>& v,char d){
+  template<typename T> constexpr inline tri3<T> rotateT(tri3<T>& v,char d){
     rotate(v.a.x,v.a.y,d);rotate(v.b.x,v.b.y,d);rotate(v.c.x,v.c.y,d);
     return v;
   }

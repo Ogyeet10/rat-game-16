@@ -6,6 +6,7 @@
 #include <cstring>
 #include <errno.h>
 #include <type_traits>
+#include <3rats.hpp>
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
 #define DO(x) if(x)
 #define ABORT if(file){fclose(file);file=NULL;}if(tmp){free(tmp);tmp=NULL;};exit(8);
@@ -183,19 +184,19 @@ namespace assets {
   }
   mesh::vec2<float> readV2f(FILE* file,char* tmp){
     mesh::vec2<float> out;
-    FEXPECTS("(",1)ORDIE("expected '(' to start vector");wspace(file,tmp);
+    DO(fgetc(file)!='(')ORDIE("expected '(' to start vector");wspace(file,tmp);
     tmp[nspace(file,tmp)]='\0';
     out.x=atof(tmp);
-    FEXPECTS(",",1)ORDIE("expected ',' to separate vector coordinates");wspace(file,tmp);
+    DO(fgetc(file)!=',')ORDIE("expected ',' to separate vector coordinates");wspace(file,tmp);
     tmp[nspace(file,tmp)]='\0';
     out.y=atof(tmp);
-    wspace(file,tmp);FEXPECTS(")",1)ORDIE("expected ')' to end vector");
+    wspace(file,tmp);DO(fgetc(file)!=')')ORDIE("expected ')' to end vector");
     return out;
   }
   std::vector<mesh::vec2<float>> readV2FVec(FILE* file,char* tmp){
     std::vector<mesh::vec2<float>> out={};
     wspace(file,tmp);
-    FEXPECTS("[",1)ORDIE("expected '[' to start array");
+    DO(fgetc(file)!='[')ORDIE("expected '[' to start array");
     while(!feof(file)){
       wspace(file,tmp);
       out.push_back(readV2f(file,tmp));
@@ -205,7 +206,7 @@ namespace assets {
       }
     }
     wspace(file,tmp);
-    FEXPECTS("]",1)ORDIE("expected ']' to end array");
+    DO(fgetc(file)!=']')ORDIE("expected ']' to end array");
     return out;
   }
   assets::asset3d_t readAsset3d(const char* name) {
@@ -229,7 +230,7 @@ namespace assets {
       DO(!token_length)ORDIE1("bad tokens in asset")
       if((token_length==5)&&!(memcmp(tmp,"model",5))){
         DO(mesh_fp[0])ORDIE1("duplicate models in asset")
-        wspace(file,tmp);FEXPECTS("=",1)ORDIE("expected '=' to assign model path");wspace(file,tmp);
+        wspace(file,tmp);DO(fgetc(file)!='=')ORDIE("expected '=' to assign model path");wspace(file,tmp);
         token_length=readUntil(file,tmp,';');
         printf("reading model file assets/model/%.*s:",token_length,tmp);
         DO(!token_length)ORDIE1("bad model filepath in asset")
@@ -242,20 +243,9 @@ namespace assets {
         size_t s=out.mesh.tricount*sizeof(mesh::meshtri);
         out.mesh.tris=(mesh::meshtri*)calloc(s,1);
         memcpy(out.mesh.tris,&tris[0],s);
-      }else if((token_length==7)&&!(memcmp(tmp,"texture",7))){
-        DO(text_fp[0])ORDIE1("duplicate textures in asset")
-        wspace(file,tmp);FEXPECTS("=",1)ORDIE("expected '=' to assign texture path");wspace(file,tmp);
-        token_length=readUntil(file,tmp,';');
-        DO(!token_length)ORDIE1("bad texture filepath in asset")
-        DO((15+token_length+1)>=128)ORDIE1("texture filepath too long")
-        tmp[token_length]='\0';
-        memcpy(text_fp,"assets/texture/",15);
-        memcpy(&text_fp[15],tmp,token_length+1);
-        printf("reading texture file: %s, ",text_fp);
-        out.texture=readPPM(text_fp);
       }else if((token_length==6)&&!(memcmp(tmp,"texmap",6))){
         DO(!mesh_fp[0])ORDIE1("expected model before texmap")
-        wspace(file,tmp);FEXPECTS("=",1)ORDIE1("expected '=' to assign texmap");wspace(file,tmp);
+        wspace(file,tmp);DO(fgetc(file)!='=')ORDIE1("expected '=' to assign texmap");wspace(file,tmp);
         std::vector<mesh::vec2<float>> v2fv=readV2FVec(file,tmp);
         uvassignedtris=v2fv.size()/3;
         DO(uvassignedtris>out.mesh.tricount)ORDIE1("too many uv coordinates")
@@ -264,8 +254,100 @@ namespace assets {
           out.mesh.tris[i].uv1=v2fv[i*3+1];
           out.mesh.tris[i].uv2=v2fv[i*3+2];
         }
+      }else if((token_length==7)&&!(memcmp(tmp,"texture",7))){
+        DO(text_fp[0])ORDIE1("duplicate textures in asset")
+        wspace(file,tmp);DO(fgetc(file)!='=')ORDIE("expected '=' to assign texture path");wspace(file,tmp);
+        token_length=readUntil(file,tmp,';');
+        DO(!token_length)ORDIE1("bad texture filepath in asset")
+        DO((15+token_length+1)>=128)ORDIE1("texture filepath too long")
+        tmp[token_length]='\0';
+        memcpy(text_fp,"assets/texture/",15);
+        memcpy(&text_fp[15],tmp,token_length+1);
+        printf("reading texture file: %s, ",text_fp);
+        out.texture=readPPM(text_fp);
+      }else if((token_length==11)&&!(memcmp(tmp,"model_scale",11))){
+        //do something
+      }else if(token_length==12){
+        if(!memcmp(tmp,"texmap_scale",12)){
+          DO(fgetc(file)!='(')ORDIE1("expected '(' to start texmap_scale parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float x=atof(tmp);
+          DO(fgetc(file)!=',')ORDIE1("expected ',' to separate texmap_scale parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float y=atof(tmp);
+          DO(fgetc(file)!=')')ORDIE1("expected ')' to end texmap_scale parameters")
+          for(unsigned int i=0;i<uvassignedtris;i++){
+            out.mesh.tris[i].uv0.x*=x;
+            out.mesh.tris[i].uv1.x*=x;
+            out.mesh.tris[i].uv2.x*=x;
+            out.mesh.tris[i].uv0.y*=y;
+            out.mesh.tris[i].uv1.y*=y;
+            out.mesh.tris[i].uv2.y*=y;
+          }
+        }else if(!memcmp(tmp,"model_offset",12)){
+          DO(!out.mesh.tricount)ORDIE1("expected model before model_offset")
+          DO(fgetc(file)!='(')ORDIE1("expected '(' to start model_offset parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float x=atof(tmp);
+          DO(fgetc(file)!=',')ORDIE1("expected ',' to separate model_offset parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float y=atof(tmp);
+          DO(fgetc(file)!=',')ORDIE1("expected ',' to separate model_offset parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float z=atof(tmp);
+          DO(fgetc(file)!=')')ORDIE1("expected ')' to end model_offset parameters")
+          mesh::vec3<float> off{x,y,z};
+          for(unsigned int i=0;i<out.mesh.tricount;i++){
+            out.mesh.tris[i]=out.mesh.tris[i]+off;
+          }
+        }else if(!memcmp(tmp,"model_rotate",12)){
+          DO(!out.mesh.tricount)ORDIE1("expected model before model_rotate")
+          DO(fgetc(file)!='(')ORDIE1("expected '(' to start model_rotate parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float x=atof(tmp)*255;
+          DO(fgetc(file)!=',')ORDIE1("expected ',' to separate model_rotate parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float y=atof(tmp)*255;
+          DO(fgetc(file)!=',')ORDIE1("expected ',' to separate model_rotate parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float z=atof(tmp)*255;
+          DO(fgetc(file)!=')')ORDIE1("expected ')' to end model_rotate parameters")
+          for(unsigned int i=0;i<out.mesh.tricount;i++){
+            if(x){
+              mesh::rotate(out.mesh.tris[i].a.y,out.mesh.tris[i].a.z,(char)x);
+              mesh::rotate(out.mesh.tris[i].b.y,out.mesh.tris[i].b.z,(char)x);
+              mesh::rotate(out.mesh.tris[i].c.y,out.mesh.tris[i].c.z,(char)x);
+            }
+            if(y){
+              mesh::rotate(out.mesh.tris[i].a.z,out.mesh.tris[i].a.x,(char)y);
+              mesh::rotate(out.mesh.tris[i].b.z,out.mesh.tris[i].b.x,(char)y);
+              mesh::rotate(out.mesh.tris[i].c.z,out.mesh.tris[i].c.x,(char)y);
+            }
+            if(z){
+              mesh::rotate(out.mesh.tris[i].a.x,out.mesh.tris[i].a.y,(char)z);
+              mesh::rotate(out.mesh.tris[i].b.x,out.mesh.tris[i].b.y,(char)z);
+              mesh::rotate(out.mesh.tris[i].c.x,out.mesh.tris[i].c.y,(char)z);
+            }
+          }
+        }
+      }else if((token_length==13)&&!memcmp(tmp,"texmap_offset",13)){
+        DO(fgetc(file)!='(')ORDIE1("expected '(' to start texmap_offset parameters")
+        tmp[nspace(file,tmp)]='\0';
+        float x=atof(tmp);
+        DO(fgetc(file)!=',')ORDIE1("expected ',' to separate texmap_offset parameters")
+        tmp[nspace(file,tmp)]='\0';
+        float y=atof(tmp);
+        DO(fgetc(file)!=')')ORDIE1("expected ')' to end texmap_offset parameters")
+        for(unsigned int i=0;i<uvassignedtris;i++){
+          out.mesh.tris[i].uv0.x+=x;
+          out.mesh.tris[i].uv1.x+=x;
+          out.mesh.tris[i].uv2.x+=x;
+          out.mesh.tris[i].uv0.y+=y;
+          out.mesh.tris[i].uv1.y+=y;
+          out.mesh.tris[i].uv2.y+=y;
+        }
       }else if((token_length==18)&&!memcmp(tmp,"texmap_filldefault",18)){
-        FEXPECTS("(",1)ORDIE1("expected '(' to start texmap_filldefault parameters")
+        DO(fgetc(file)!='(')ORDIE1("expected '(' to start texmap_filldefault parameters")
         wspace(file,tmp);
         switch(fgetc(file)){
           case 'x':
@@ -289,7 +371,7 @@ namespace assets {
           default:
             DO(1)ORDIE1("unrecognized texmap_filldefault parameter")
         }
-        wspace(file,tmp);FEXPECTS(",",1)ORDIE1("expected ',' to separate texmap_filldefault parameters")
+        wspace(file,tmp);DO(fgetc(file)!=',')ORDIE1("expected ',' to separate texmap_filldefault parameters")
         switch(fgetc(file)){
           case 'x':
             for(unsigned int i=uvassignedtris;i<out.mesh.tricount;i++){
@@ -312,40 +394,8 @@ namespace assets {
           default:
             DO(1)ORDIE1("unrecognized texmap_filldefault parameter")
         }
-        wspace(file,tmp);FEXPECTS(")",1)ORDIE1("expected ')' to end texmap_filldefault")
+        wspace(file,tmp);DO(fgetc(file)!=')')ORDIE1("expected ')' to end texmap_filldefault")
         uvassignedtris=out.mesh.tricount;
-      }else if((token_length==13)&&!memcmp(tmp,"texmap_offset",13)){
-        FEXPECTS("(",1)ORDIE1("expected '(' to start texmap_offset parameters")
-        tmp[nspace(file,tmp)]='\0';
-        float x=atof(tmp);
-        FEXPECTS(",",1)ORDIE1("expected ',' to separate texmap_offset parameters")
-        tmp[nspace(file,tmp)]='\0';
-        float y=atof(tmp);
-        FEXPECTS(")",1)ORDIE1("expected ')' to end texmap_offset parameters")
-        for(unsigned int i=0;i<uvassignedtris;i++){
-          out.mesh.tris[i].uv0.x+=x;
-          out.mesh.tris[i].uv1.x+=x;
-          out.mesh.tris[i].uv2.x+=x;
-          out.mesh.tris[i].uv0.y+=y;
-          out.mesh.tris[i].uv1.y+=y;
-          out.mesh.tris[i].uv2.y+=y;
-        }
-      }else if((token_length==12)&&!memcmp(tmp,"texmap_scale",12)){
-        FEXPECTS("(",1)ORDIE1("expected '(' to start texmap_scale parameters")
-        tmp[nspace(file,tmp)]='\0';
-        float x=atof(tmp);
-        FEXPECTS(",",1)ORDIE1("expected ',' to separate texmap_scale parameters")
-        tmp[nspace(file,tmp)]='\0';
-        float y=atof(tmp);
-        FEXPECTS(")",1)ORDIE1("expected ')' to end texmap_scale parameters")
-        for(unsigned int i=0;i<uvassignedtris;i++){
-          out.mesh.tris[i].uv0.x*=x;
-          out.mesh.tris[i].uv1.x*=x;
-          out.mesh.tris[i].uv2.x*=x;
-          out.mesh.tris[i].uv0.y*=y;
-          out.mesh.tris[i].uv1.y*=y;
-          out.mesh.tris[i].uv2.y*=y;
-        }
       }
     }
     DO(uvassignedtris!=out.mesh.tricount)ORDIE1("didn't assign enough uv coordinates")
