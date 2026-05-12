@@ -21,15 +21,16 @@ namespace assets {
       }
       // ~texture_t() noexcept {free(pixels);}
   };
-  #define UPPER(f) &f.map[f.sizex*f.sizey*(unsigned char)'A']
-  #define LOWER(f) &f.map[f.sizex*f.sizey*(unsigned char)'a']
-  #define SPECIAL(f) &f.map[f.sizex*f.sizey*(unsigned char)'!']
-  #define NUMBERS(f) &f.map[f.sizex*f.sizey*(unsigned char)'0']
-  #define SPECIAL2(f) &f.map[f.sizex*f.sizey*(unsigned char)'[']
-  #define SPECIAL3(f) &f.map[f.sizex*f.sizey*(unsigned char)'{']
+  #define UPPER(f) &f.map[(unsigned char)'A']
+  #define LOWER(f) &f.map[(unsigned char)'a']
+  #define SPECIAL(f) &f.map[(unsigned char)'!']
+  #define NUMBERS(f) &f.map[(unsigned char)'0']
+  #define SPECIAL2(f) &f.map[(unsigned char)'[']
+  #define SPECIAL3(f) &f.map[(unsigned char)'{']
   struct font_t{
-    unsigned char sizex,sizey;
-    char* map;
+    unsigned char sizey;
+    unsigned char* sizex;
+    char** map;
   };
 }
 namespace gui {
@@ -45,8 +46,8 @@ namespace gui {
     text_align alignment;
   };
   struct menu_t{
-    const scoord sizex,sizey;
-    const char borders[5];//up/down/left/right/corner
+    scoord sizex,sizey;
+    char borders[5];//up/down/left/right/corner
     scoord textcount;
     text_t* items;
     scoord btncount;
