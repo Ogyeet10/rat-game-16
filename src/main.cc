@@ -1,4 +1,4 @@
-#define colon three
+// #define do_debug :3 //makes everything really slow
 #define PRINT_TRI3(B,T,F) fprintf(B,"triangle((%" #F ",%" #F ",%" #F "),(%" #F ",%" #F ",%" #F "),(%" #F ",%" #F ",%" #F ")),",T.a.x,T.a.y,T.a.z,T.b.x,T.b.y,T.b.z,T.c.x,T.c.y,T.c.z)
 #define PRINT_TRI2(B,T,F) fprintf(B,"polygon((%" #F ",%" #F "),(%" #F ",%" #F "),(%" #F ",%" #F ")),",T.a.x,T.a.y,T.b.x,T.b.y,T.c.x,T.c.y)
 #define PRINT_TRI21(B,F)   fprintf(B,"polygon((%" #F ",%" #F "),(%" #F ",%" #F "),(%" #F ",%" #F ")),",x0,y0,x1,y1,x2,y2)
@@ -11,7 +11,7 @@
 FILE* debug;
 bool logmisc=false;
 template<typename T> concept arith=std::is_arithmetic_v<T>;
-template<typename T> concept comp =requires(T a,T b){a<b;a>b;a==b;};
+template<typename T> concept comp =requires(T a,T b){a<b;a>b;};
 template<comp T,comp U> T constexpr const min(T a,U b){return a<b?a:b;}
 template<comp T,comp U> T constexpr const max(T a,U b){return a<b?b:a;}
 template<comp T,comp...U> T constexpr const min(T t, U...a){

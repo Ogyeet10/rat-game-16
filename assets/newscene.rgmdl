@@ -1,6 +1,6 @@
 model = scene_demo/newscene.stl;
 texture = ice_crushed.ppm;
 model_offset(0,-2,0)
-model_rotate(0.25,0,0)
+model_rotate(0.25,0,0.5)
 texmap_filldefault(x,y)
 texmap_scale(0.25,0.25)

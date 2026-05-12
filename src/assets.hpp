@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <type_traits>
 #include <3rats.hpp>
-#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+// #pragma GCC diagnostic ignored "-Wint-to-pointer-cast" wait what
 #define DO(x) if(x)
 #define ABORT if(file){fclose(file);file=NULL;}if(tmp){free(tmp);tmp=NULL;};exit(8);
 #define ORDIE(s) {if(errno){perror(s);}else{puts(s);}ABORT}
@@ -121,6 +121,11 @@ namespace assets {
         FEXPECTL("endloop",7)ORDIE("expected endloop");
         FEXPECTL("endfacet",8)ORDIE("expected endfacet");
         mesh::meshtri tri{x0,y0,z0,x1,y1,z1,x2,y2,z2};
+        if((
+          (fabs(tri.c.x-tri.a.x)<0.1)+(fabs(tri.c.y-tri.a.y)<0.1)+(fabs(tri.c.z-tri.a.z)<0.1)+
+          (fabs(tri.b.x-tri.a.x)<0.1)+(fabs(tri.b.y-tri.a.y)<0.1)+(fabs(tri.b.z-tri.a.z)<0.1))
+          <3
+        ){continue;}
         if((tri.c-tri.a).cross(tri.b-tri.a).magnitude()>0.1){tris.push_back(tri);}
       }
     }
@@ -404,25 +409,6 @@ namespace assets {
     fclose(file);file=NULL;
     return out;
 #undef ORDIE1
-  }
-  void writeGrayScaleToPPM(const char* name,const unsigned char* buf,size_t width,size_t height){
-    FILE* file=fopen(name,"w");
-    fprintf(file,"P3 %lu %lu 255\n",width,height*3);
-    for(unsigned int i=0;i<height;i++){
-      for(unsigned int j=0;j<width;j++){
-        fprintf(file,"%3u %3u %3u ",buf[i*width+j],buf[i*width+j],buf[i*width+j]);
-      }
-      fputs("\n",file);
-      for(unsigned int j=0;j<width;j++){
-        fprintf(file,"%3u %3u %3u ",buf[i*width+j],buf[i*width+j],buf[i*width+j]);
-      }
-      fputs("\n",file);
-      for(unsigned int j=0;j<width;j++){
-        fprintf(file,"%3u %3u %3u ",buf[i*width+j],buf[i*width+j],buf[i*width+j]);
-      }
-      fputs("\n",file);
-    }
-    fclose(file);
   }
   font_t readFont(const char* name){//we could probably standardize systems of scanning files because lots of this code is reused
     DO(strlen(name)>=128){perror("file name too long");exit(1);}//but we only have 2 formats so that's not an issue rn
