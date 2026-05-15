@@ -58,18 +58,17 @@ namespace gui {
   scoord max_chars=0;
 
   __attribute__((format (printf,1,2))) void dbprintf(const char* str, ...){
-    static unsigned long last_amt=0;
     va_list args;
     fwrite("\x1b[2J\x1b[0;0H\x1b[0m",1,10,stdout);
     va_start(args,str);
-    last_amt=vfprintf(stdout,str,args);
+    vfprintf(stdout,str,args);
     va_end(args);
     fflush(stdout);
   }
   #ifdef do_debug
     #define printd(...) ::gui::dbprintf(__VA_ARGS__)
   #else
-    #define printd
+    #define printd(...)
   #endif
   int set_term_flags(tcflag_t fl,tcflag_t fi,tcflag_t fo){
     cur_term_state.c_lflag&=fl;
@@ -260,7 +259,6 @@ namespace gui {
     // term_buffer[toSSPI(x+1,y)+sprintf(&term_buffer[toSSPI(x+1,y)],"%i",menu->sizey)]='!';
     y++;
     for(scoord i=0;(i<menu->textcount)&&(y<(menu->sizey+y1));i++){
-      scoord HATE=y;
       y=putFText(menu->items[i],x+1,y,menu->sizex-1,menu->sizey+y1-y);
     }
     for(scoord i=0;(i<menu->btncount)&&(y<(menu->sizey+y1));i++){

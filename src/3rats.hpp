@@ -125,7 +125,6 @@ namespace mesh {
         break;
       }
       case 3:{
-        return_original:
         o0=t.a;o1=t.b;o2=t.c;
       }
     }

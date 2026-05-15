@@ -141,7 +141,6 @@ namespace assets {
     FILE* file=fopen(filename, "r");
     char* tmp = (char*)malloc(128);
     DO(!file){memcpy(tmp,"couldn't open file for read: ",30);strncat(tmp,filename,128);perror(tmp);ABORT};
-    int i=0;
     int width, height, maxVal;
     char format=0;
     FEXPECTS("P3",2){//segfaults i guess
@@ -171,7 +170,7 @@ namespace assets {
       wspace(file,tmp);
       short unsigned int r,g,b;
       unsigned j;
-      while(!feof(file)&&(j<width*height)){
+      while(!feof(file)&&(j<(width*height))){
         fread(&r,1+(maxVal>255),1,file);
         fread(&g,1+(maxVal>255),1,file);
         fread(&b,1+(maxVal>255),1,file);
@@ -227,7 +226,6 @@ namespace assets {
     DO(!mesh_fp)ORDIE("couldn't alloc memory for mesh file path for asset")
     char* text_fp=(char*)calloc(128,1);
     DO(!text_fp)ORTHENDIE(free(mesh_fp),"couldn't alloc memory for texture file path for asset")
-    mesh::vec2<float>* tex_binds;
     unsigned short int uvassignedtris=0;
     while(!feof(file)){
       wspace(file,tmp);
@@ -435,7 +433,7 @@ namespace assets {
     wspace(file,tmp);
     while(!feof(file)){
       unsigned int token_length=nspace(file,tmp);
-      DO(!token_length)ORTHENDIE(printf("\"%s\"\nat %i:",tmp,ftell(file)),"bad tokens in asset")
+      DO(!token_length)ORTHENDIE(printf("\"%s\"\nat %li:",tmp,ftell(file)),"bad tokens in asset")
       if(token_length==14){
         if(!memcmp(tmp,"alphabet_upper",14)){
           amt=26;readTo='A';
@@ -454,16 +452,16 @@ namespace assets {
         }
       }
       DO(readTo){
-        DO(getc(file)!='\n')ORTHENDIE(printf("expected newline at %i after %.*s!\n",ftell(file),token_length,tmp),"bad read")
+        DO(getc(file)!='\n')ORTHENDIE(printf("expected newline at %li after %.*s!\n",ftell(file),token_length,tmp),"bad read")
         unsigned int total=0;
         printf("%.*s:",token_length,tmp);
         if(!out.sizex[readTo]){
           for(unsigned int i=0;i<amt;i++){
             total+=(out.sizex[readTo+i]=readUntil(file,tmp,'.')+1);getc(file);
-            printf("%i,",out.sizex[readTo+i],out.sizex[readTo+i]);
+            printf("%i,",out.sizex[readTo+i]);
           }
           printf("\b:%i\n",total);
-          DO(getc(file)!='\n')ORTHENDIE(printf("expected newline at %i after width!\n",ftell(file)),"bad read")
+          DO(getc(file)!='\n')ORTHENDIE(printf("expected newline at %li after width!\n",ftell(file)),"bad read")
         }else{
           puts("\b ");
         }
@@ -472,12 +470,12 @@ namespace assets {
             if(!out.map[readTo+j]){out.map[readTo+j]=(char*)malloc(out.sizey*out.sizex[readTo+j]);}
             DO((token_length=fread(&out.map[readTo+j][i*out.sizex[readTo+j]],1,out.sizex[readTo+j],file))!=out.sizex[readTo+j])
             ORTHENDIE(
-              printf("did't get enough characters: %i/%i at %i:(%i,%i):%i\n",
+              printf("did't get enough characters: %i/%hhn at %li:(%i,%i):%lu\n",
                 token_length,out.sizex,ftell(file),j,i,amt)
               ,"bad read")
             DO(errno)ORDIE("unexpected error while reading");
-      	    DO(ferror(file))ORTHENDIE(printf("error at %i!\n",ftell(file));,"unexpected error while reading");
-      	    DO(feof(file))ORTHENDIE(printf("error at %i!\n",ftell(file));,"unexpected end of file");
+      	    DO(ferror(file))ORTHENDIE(printf("error at %li!\n",ftell(file));,"unexpected error while reading");
+      	    DO(feof(file))ORTHENDIE(printf("error at %li!\n",ftell(file));,"unexpected end of file");
           }
           getc(file);
         }

@@ -9,7 +9,7 @@ namespace colors {
     else{snprintf(buf,6,"\x1b""[%.2dm",  (c&0x07)+30);return buf;}//holy memleak
   }
   constexpr char* ansi_bg(char c,char* buf){
-    if(c&0x80){snprintf(buf,8,"\x1b""[%.2d;1m",(c>>4)&0x07+40);return buf;}
-    else{snprintf(buf,6,"\x1b""[%.2dm",  (c>>4)&0x07+40);return buf;}
+    if(c&0x80){snprintf(buf,8,"\x1b""[%.2d;1m",((c>>4)&0x07)+40);return buf;}
+    else{snprintf(buf,6,"\x1b""[%.2dm",  ((c>>4)&0x07)+40);return buf;}
   }
 }
