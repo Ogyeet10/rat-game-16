@@ -9,15 +9,15 @@ whitespace before and after the = operator is trimmed but
 everything between the first non-whitespace character and the
 semicolon is taken as the file name. no fancy stuff like
 globbing and you only get to set it once per model (once per
-file).
-the texture map is assigned as [(x,y),(x,y),(x,y)...] where x
-and y are floating point numbers. it represents the uv
-coordinates of each triangle on the model's vertex, in the
-same order as in the model. you can have up to as many
-vertices as there are on the model (including overlaps)
-there are also a few functions (i'll probably add more later)
-that help out with making the texture map because its pretty
-annoying to do manually and they are:
+file). the only supported model files are in STL (as in [2])
+and the only supported texture files are in PPM (as in [0])
+you can manually assign uv coordinates to triangles using 
+texmap=[(x,y),(x,y),(x,y)...]
+this will set triangles' uv coordinates in sequence (every 3
+points correspond to 1 triangle) but that's a massive pain in
+the ass so you can use texmap_filldefault (below)
+because manually assigning textures is horrible and evil, in
+an rgmdl file you can use a few functions
 - texmap_offset(x,y)
     shifts every assigned point on the map by (x,y) where x
     and y are floats.
@@ -26,13 +26,25 @@ annoying to do manually and they are:
     can't say multiples because there's like 5 products. x and
     y are floats.
 - texmap_filldefault(a,b)
-    a and b are x, y, or z. fills in all unassigned points on
-    the texture map with the value of their mesh-space
-    counterpart. example: texmap_filldefault(z,x) sets all
-    unassigned points's x to their counterpart's z and their y
-    to their counterpart's x.
-oh yeah the texture has to be in ppm format. i that one :100:
-there's also like whitespace. you can put it in a few places.
-if things start breaking, take it out
+    a and b are characters x, y, or z. fills in all unassigned
+    points on the texture map with the value of their
+    mesh-space counterpart. example: texmap_filldefault(z,x)
+    sets all unassigned uv points's x to their counterpart's z
+    and their y to their counterpart's x.
+-texmap_filldefault()
+    assigns texture coordinates automatically. the first point
+    on the triangle becomes (0,0), the second becomes (x,0)
+    where x is the distance between the first and second, and
+    the third becomes (x,y) where distances between the first
+    and third and second and third are equivalent across
+    coordinate spaces, achieved by plane definitions as a
+    function returning distance i think (see [1]). 
+whitespace is allowed in a lot of places but also no
+guarantees
 you can comment, everything after a # before a newline doesn't
-get parsed
+get parsed but like it might get messed up if you do it in the
+middle of something important
+[#] link                                            [dd/mm/yy]
+[0] https://netpbm.sourceforge.net/doc/ppm.html     [15/05/26]
+[1] https://www.desmos.com/3d/z47weump9s            [15/05/26]
+[2] https://en.wikipedia.org/wiki/STL_(file_format) [15/05/26]

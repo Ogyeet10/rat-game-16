@@ -13,13 +13,6 @@ namespace assets {
   struct texture_t {
       unsigned char* pixels;
       unsigned int width, height;
-      texture_t() = default;
-      texture_t(const texture_t& o) {
-          width=o.width; height=o.height;
-          pixels=(unsigned char*)malloc(width*height*3);
-          memcpy(pixels,o.pixels,width*height*3);
-      }
-      // ~texture_t() noexcept {free(pixels);}
   };
   #define UPPER(f) &f.map[(unsigned char)'A']
   #define LOWER(f) &f.map[(unsigned char)'a']
@@ -119,7 +112,6 @@ namespace mesh {
   };
   struct meshtri:tri3<mesh_size>{
     vec2<float> uv0, uv1, uv2;
-    // unsigned char flags=255;
     template<typename U> auto constexpr operator+(const tri3<U>& t)const{return (meshtri){a+t.a,b+t.b,c+t.c,uv0,uv1,uv2};}
     template<typename U> auto constexpr operator+(const vec3<U>& v)const{return (meshtri){a+v,b+v,c+v,uv0,uv1,uv2};}
     template<typename U> auto constexpr operator+(const U& v)const{return (meshtri){a+v,b+v,c+v,uv0,uv1,uv2};}
@@ -136,13 +128,13 @@ namespace mesh {
   struct model_t {
     short unsigned int tricount;
     meshtri* tris;
-  // ~model_t() noexcept {free(tris);}
   };
 }
 namespace assets{
   struct asset3d_t{
     mesh::model_t mesh;
-    assets::texture_t texture;
+    unsigned char* tex_binds;
+    assets::texture_t* textures;
   };
 }
 #endif

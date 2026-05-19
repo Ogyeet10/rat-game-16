@@ -24,7 +24,7 @@ DO(fread(tmp,1,EXP_STR_LEN,file)<1){perror("expected to be able to read more");A
 DO(memcmp(tmp,EXP_STR,EXP_STR_LEN))
 #define FGETI(VAR)\
 VAR=0;\
-do{tmp[VAR]=fgetc(file);VAR++;}while(('0'<=tmp[VAR-1])&&(tmp[VAR-1]<='9'));\
+do{tmp[VAR]=fgetc(file);VAR++;}while(('0'<=tmp[VAR-1])&&(tmp[VAR-1]<='9')&&(VAR<127));\
 VAR--;ungetc(tmp[VAR],file);\
 tmp[VAR]='\0';VAR=atoi(tmp);
 #define WSPACEL(VAR) while((tmp[VAR]==' ')||(tmp[VAR]=='\n')||(tmp[VAR]=='#')){if(tmp[VAR]=='#'){while(tmp[VAR]!='\n'){VAR++;}}VAR++;}
@@ -39,7 +39,7 @@ namespace assets {
     do{
       j=fgetc(file);
       if(j=='#'){
-        while(j!='\n'){o++;j=fgetc(file);}
+        while(j!='\n'&&(!feof(file))){o++;j=fgetc(file);}
       }
       o++;
     }while((j==' ')||(j=='\n')||(j=='#'));
@@ -126,7 +126,7 @@ namespace assets {
         if((
           (fabs(tri.c.x-tri.a.x)<0.1)+(fabs(tri.c.y-tri.a.y)<0.1)+(fabs(tri.c.z-tri.a.z)<0.1)+
           (fabs(tri.b.x-tri.a.x)<0.1)+(fabs(tri.b.y-tri.a.y)<0.1)+(fabs(tri.b.z-tri.a.z)<0.1))
-          <3
+          <3//ily
         ){continue;}
         if((tri.c-tri.a).cross(tri.b-tri.a).magnitude()>0.1){tris.push_back(tri);}
       }
@@ -141,7 +141,7 @@ namespace assets {
     texture_t out;
     FILE* file=fopen(filename, "r");
     char* tmp = (char*)malloc(128);
-    DO(!file){memcpy(tmp,"couldn't open file for read: ",30);strncat(tmp,filename,127);perror(tmp);ABORT};
+    DO(!file){perror("couldn't open texture file for read");ABORT};
     int width, height, maxVal;
     char format=0;
     FEXPECTS("P3",2){//segfaults i guess
@@ -158,7 +158,9 @@ namespace assets {
     out.width=width;out.height=height;out.pixels=(unsigned char*)malloc(3*width*height);
     if(format==1){//ppm3
       unsigned int r=0,g=0,b=0,j=0;
-      while(!feof(file)&&(j<width*height)){
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
+      while(!feof(file)&&(j<(width*height))){
         wspace(file,tmp);FGETI(r);
         wspace(file,tmp);FGETI(g);
         wspace(file,tmp);FGETI(b);
@@ -172,6 +174,7 @@ namespace assets {
       short unsigned int r,g,b;
       unsigned j;
       while(!feof(file)&&(j<(width*height))){
+#pragma GCC diagnostic pop
         fread(&r,1+(maxVal>255),1,file);
         fread(&g,1+(maxVal>255),1,file);
         fread(&b,1+(maxVal>255),1,file);
@@ -214,7 +217,9 @@ namespace assets {
     return out;
   }
   assets::asset3d_t readAsset3d(const char* name) {
-#define ORDIE1(S) {if(mesh_fp){free(mesh_fp);mesh_fp=NULL;}if(text_fp){free(text_fp);text_fp=NULL;}if(out.mesh.tris){free(out.mesh.tris);out.mesh.tris=NULL;}perror(S);if(file){fclose(file);file=NULL;}if(tmp){free(tmp);tmp=NULL;};exit(1);}
+#define ORDIE1(S) {if(mesh_fp){free(mesh_fp);mesh_fp=NULL;}if(out.mesh.tris){free(out.mesh.tris);out.mesh.tris=NULL;}perror(S);if(file){fclose(file);file=NULL;}if(tmp){free(tmp);tmp=NULL;};exit(1);}
+#define ORTHENDIE1(c,s){c;ORDIE1(s)}
+#define EXPCORDIE(N,C,N1) DO(fgetc(file)!=C)ORDIE1(N " " #C " " N1)
     DO(strlen(name)>=128){perror("file name too long");exit(1);}
     printf("loading asset %s:\n",name);
     asset3d_t out{};
@@ -224,13 +229,12 @@ namespace assets {
     DO(!tmp)ORDIE("couldn't alloc memory for tmp buffer")
     char* mesh_fp=(char*)calloc(128,1);
     DO(!mesh_fp)ORDIE("couldn't alloc memory for mesh file path for asset")
-    char* text_fp=(char*)calloc(128,1);
-    DO(!text_fp)ORTHENDIE(free(mesh_fp),"couldn't alloc memory for texture file path for asset")
-    unsigned short int uvassignedtris=0;
+    char* uvassignedtris=NULL;//bool size is implementation defined so we don't use it
+    std::vector<texture_t> textures{};
     while(!feof(file)){
       wspace(file,tmp);
       unsigned int token_length=nspace(file,tmp);
-      DO(!token_length)ORDIE1("bad tokens in asset")
+      DO(!token_length)ORTHENDIE1(printf("\"%s\" at %li:",tmp,ftell(file));fflush(stdout),"bad tokens in asset")
       if((token_length==5)&&!(memcmp(tmp,"model",5))){
         DO(mesh_fp[0])ORDIE1("duplicate models in asset")
         wspace(file,tmp);DO(fgetc(file)!='=')ORDIE("expected '=' to assign model path");wspace(file,tmp);
@@ -245,31 +249,94 @@ namespace assets {
         out.mesh.tricount=tris.size();
         size_t s=out.mesh.tricount*sizeof(mesh::meshtri);
         out.mesh.tris=(mesh::meshtri*)calloc(s,1);
+        uvassignedtris=(char*)calloc(out.mesh.tricount,1);
+        out.tex_binds=(unsigned char*)calloc(out.mesh.tricount,1);
         memcpy(out.mesh.tris,&tris[0],s);
       }else if((token_length==6)&&!(memcmp(tmp,"texmap",6))){
         DO(!mesh_fp[0])ORDIE1("expected model before texmap")
         wspace(file,tmp);DO(fgetc(file)!='=')ORDIE1("expected '=' to assign texmap");wspace(file,tmp);
         std::vector<mesh::vec2<float>> v2fv=readV2FVec(file,tmp);
-        uvassignedtris=v2fv.size()/3;
-        DO(uvassignedtris>out.mesh.tricount)ORDIE1("too many uv coordinates")
-        for(short unsigned int i=0;i<uvassignedtris;i++){
+        unsigned int tricount=v2fv.size()/3;
+        DO(tricount>out.mesh.tricount)ORDIE1("too many uv coordinates")
+        for(unsigned int i=0;i<tricount;i++){
           out.mesh.tris[i].uv0=v2fv[i*3];
           out.mesh.tris[i].uv1=v2fv[i*3+1];
           out.mesh.tris[i].uv2=v2fv[i*3+2];
+          uvassignedtris[i]=1;
         }
-      }else if((token_length==7)&&!(memcmp(tmp,"texture",7))){
-        DO(text_fp[0])ORDIE1("duplicate textures in asset")
-        wspace(file,tmp);DO(fgetc(file)!='=')ORDIE("expected '=' to assign texture path");wspace(file,tmp);
-        token_length=readUntil(file,tmp,';');
-        DO(!token_length)ORDIE1("bad texture filepath in asset")
-        DO((15+token_length+1)>=128)ORDIE1("texture filepath too long")
-        tmp[token_length]='\0';
-        memcpy(text_fp,"assets/texture/",15);
-        memcpy(&text_fp[15],tmp,token_length+1);
-        printf("reading texture file: %s, ",text_fp);
-        out.texture=readPPM(text_fp);
+      }else if(token_length==7){
+        if(!memcmp(tmp,"texture",7)){
+          DO(out.textures)ORDIE1("duplicate textures in asset")
+          wspace(file,tmp);DO(fgetc(file)!='=')ORDIE1("expected '=' to assign texture path");wspace(file,tmp);
+          char c=fgetc(file);
+          if(c=='['){
+            while(c!=']'){
+              wspace(file,tmp);
+              token_length=readUntil(file,tmp,',',']');
+              DO((15+token_length+1)>=128)ORDIE1("texture filepath too long")
+              memmove(tmp+15,tmp,token_length);
+              memcpy(tmp,"assets/texture/",15);
+              tmp[15+token_length]='\0';
+              printf("reading textures %s:",tmp);
+              textures.push_back(readPPM(tmp));
+              c=fgetc(file);
+            }
+          }else{
+            tmp[0]=c;
+            token_length=readUntil(file,&tmp[1],';')+1;
+            DO(!token_length)ORDIE1("bad texture filepath in asset")
+            DO((15+token_length+1)>=128)ORDIE1("texture filepath too long")
+            memmove(tmp+15,tmp,token_length);
+            memcpy(tmp,"assets/texture/",15);
+            tmp[15+token_length]='\0';
+            printf("reading textures %s:",tmp);
+            textures.push_back(readPPM(tmp));
+          }
+        }else if(!memcmp(tmp,"tex_set",7)){
+          DO(!out.mesh.tricount)ORDIE1("you need a model to assign triangle texture indices, dumbass")
+          EXPCORDIE("expected",'(',"to start tex_set")
+          unsigned int i;FGETI(i);
+          EXPCORDIE("expected",',',"to delimit parameters of tex_set")
+          unsigned int j;FGETI(j);
+          EXPCORDIE("expected",')',"to end tex_set")
+          DO(i>=out.mesh.tricount)ORDIE1("tex_set triangle index out of bounds")
+          DO(j>=textures.size())ORDIE1("tex_set texture index out of bounds")
+          out.tex_binds[i]=(unsigned char)j;
+        }
+      }else if((token_length==9)&&!(memcmp(tmp,"tex_binds",9))){
+        wspace(file,tmp);
+        DO(fgetc(file)!='=')ORDIE1("expected '=' to assign tex_binds")
+        wspace(file,tmp);
+        char c=fgetc(file);
+        DO(c!='[')ORDIE1("expected '[' to start tex_binds")
+        wspace(file,tmp);
+        unsigned int i=0;
+        do{
+          unsigned int j;
+          FGETI(j);
+          out.tex_binds[i]=j;
+          i++;
+          wspace(file,tmp);
+          c=fgetc(file);//could definitely optimize the constant ungetc and fgetc calls but
+          wspace(file,tmp);
+        }while((c==',')&&(i<out.mesh.tricount));//like that's a whole load of work :/
+        DO(c!=']')ORDIE1("expected ']' to end tex_binds")
       }else if((token_length==11)&&!(memcmp(tmp,"model_scale",11))){
-        //do something
+          DO(!out.mesh.tricount)ORDIE1("expected model before model_scale")
+          DO(fgetc(file)!='(')ORDIE1("expected '(' to start model_scale parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float x=atof(tmp);
+          DO(fgetc(file)!=',')ORDIE1("expected ',' to separate model_scale parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float y=atof(tmp);
+          DO(fgetc(file)!=',')ORDIE1("expected ',' to separate model_scale parameters")
+          tmp[nspace(file,tmp)]='\0';
+          float z=atof(tmp);
+          DO(fgetc(file)!=')')ORDIE1("expected ')' to end model_scale parameters")
+          mesh::vec3<float> scale{x,y,z};
+          for(unsigned int i=0;i<out.mesh.tricount;i++){
+            out.mesh.tris[i]=out.mesh.tris[i]*scale;
+          }
       }else if(token_length==12){
         if(!memcmp(tmp,"texmap_scale",12)){
           DO(fgetc(file)!='(')ORDIE1("expected '(' to start texmap_scale parameters")
@@ -279,7 +346,7 @@ namespace assets {
           tmp[nspace(file,tmp)]='\0';
           float y=atof(tmp);
           DO(fgetc(file)!=')')ORDIE1("expected ')' to end texmap_scale parameters")
-          for(unsigned int i=0;i<uvassignedtris;i++){
+          for(unsigned int i=0;i<out.mesh.tricount;i++){
             out.mesh.tris[i].uv0.x*=x;
             out.mesh.tris[i].uv1.x*=x;
             out.mesh.tris[i].uv2.x*=x;
@@ -341,72 +408,110 @@ namespace assets {
         tmp[nspace(file,tmp)]='\0';
         float y=atof(tmp);
         DO(fgetc(file)!=')')ORDIE1("expected ')' to end texmap_offset parameters")
-        for(unsigned int i=0;i<uvassignedtris;i++){
-          out.mesh.tris[i].uv0.x+=x;
-          out.mesh.tris[i].uv1.x+=x;
-          out.mesh.tris[i].uv2.x+=x;
-          out.mesh.tris[i].uv0.y+=y;
-          out.mesh.tris[i].uv1.y+=y;
-          out.mesh.tris[i].uv2.y+=y;
+        for(unsigned int i=0;i<out.mesh.tricount;i++){
+          if(uvassignedtris[i]){
+            out.mesh.tris[i].uv0.x+=x;
+            out.mesh.tris[i].uv1.x+=x;
+            out.mesh.tris[i].uv2.x+=x;
+            out.mesh.tris[i].uv0.y+=y;
+            out.mesh.tris[i].uv1.y+=y;
+            out.mesh.tris[i].uv2.y+=y;
+          }
         }
       }else if((token_length==18)&&!memcmp(tmp,"texmap_filldefault",18)){
         DO(fgetc(file)!='(')ORDIE1("expected '(' to start texmap_filldefault parameters")
         wspace(file,tmp);
         switch(fgetc(file)){
           case 'x':
-            for(unsigned int i=uvassignedtris;i<out.mesh.tricount;i++){
-              out.mesh.tris[i].uv0.x=out.mesh.tris[i].a.x;
-              out.mesh.tris[i].uv1.x=out.mesh.tris[i].b.x;
-              out.mesh.tris[i].uv2.x=out.mesh.tris[i].c.x;
+            for(unsigned int i=0;i<out.mesh.tricount;i++){
+              if(!uvassignedtris[i]){
+                out.mesh.tris[i].uv0.x=out.mesh.tris[i].a.x;
+                out.mesh.tris[i].uv1.x=out.mesh.tris[i].b.x;
+                out.mesh.tris[i].uv2.x=out.mesh.tris[i].c.x;
+              }
             }break;
           case 'y':
-            for(unsigned int i=uvassignedtris;i<out.mesh.tricount;i++){
-              out.mesh.tris[i].uv0.x=out.mesh.tris[i].a.y;
-              out.mesh.tris[i].uv1.x=out.mesh.tris[i].b.y;
-              out.mesh.tris[i].uv2.x=out.mesh.tris[i].c.y;
+            for(unsigned int i=0;i<out.mesh.tricount;i++){
+              if(!uvassignedtris[i]){
+                out.mesh.tris[i].uv0.x=out.mesh.tris[i].a.y;
+                out.mesh.tris[i].uv1.x=out.mesh.tris[i].b.y;
+                out.mesh.tris[i].uv2.x=out.mesh.tris[i].c.y;
+              }
             }break;
           case 'z':
-            for(unsigned int i=uvassignedtris;i<out.mesh.tricount;i++){
-              out.mesh.tris[i].uv0.x=out.mesh.tris[i].a.z;
-              out.mesh.tris[i].uv1.x=out.mesh.tris[i].b.z;
-              out.mesh.tris[i].uv2.x=out.mesh.tris[i].c.z;
+            for(unsigned int i=0;i<out.mesh.tricount;i++){
+              if(!uvassignedtris[i]){
+                out.mesh.tris[i].uv0.x=out.mesh.tris[i].a.z;
+                out.mesh.tris[i].uv1.x=out.mesh.tris[i].b.z;
+                out.mesh.tris[i].uv2.x=out.mesh.tris[i].c.z;
+              }
             }break;
+          case ')':
+            goto noparam;
           default:
-            DO(1)ORDIE1("unrecognized texmap_filldefault parameter")
+            ORDIE1("unrecognized texmap_filldefault parameter")
         }
         wspace(file,tmp);DO(fgetc(file)!=',')ORDIE1("expected ',' to separate texmap_filldefault parameters")
         switch(fgetc(file)){
           case 'x':
-            for(unsigned int i=uvassignedtris;i<out.mesh.tricount;i++){
-              out.mesh.tris[i].uv0.y=out.mesh.tris[i].a.x;
-              out.mesh.tris[i].uv1.y=out.mesh.tris[i].b.x;
-              out.mesh.tris[i].uv2.y=out.mesh.tris[i].c.x;
+            for(unsigned int i=0;i<out.mesh.tricount;i++){
+              if(!uvassignedtris[i]){
+                out.mesh.tris[i].uv0.y=out.mesh.tris[i].a.x;
+                out.mesh.tris[i].uv1.y=out.mesh.tris[i].b.x;
+                out.mesh.tris[i].uv2.y=out.mesh.tris[i].c.x;
+              }
             }break;
           case 'y':
-            for(unsigned int i=uvassignedtris;i<out.mesh.tricount;i++){
-              out.mesh.tris[i].uv0.y=out.mesh.tris[i].a.y;
-              out.mesh.tris[i].uv1.y=out.mesh.tris[i].b.y;
-              out.mesh.tris[i].uv2.y=out.mesh.tris[i].c.y;
+            for(unsigned int i=0;i<out.mesh.tricount;i++){
+              if(!uvassignedtris[i]){
+                out.mesh.tris[i].uv0.y=out.mesh.tris[i].a.y;
+                out.mesh.tris[i].uv1.y=out.mesh.tris[i].b.y;
+                out.mesh.tris[i].uv2.y=out.mesh.tris[i].c.y;
+              }
             }break;
           case 'z':
-            for(unsigned int i=uvassignedtris;i<out.mesh.tricount;i++){
-              out.mesh.tris[i].uv0.y=out.mesh.tris[i].a.z;
-              out.mesh.tris[i].uv1.y=out.mesh.tris[i].b.z;
-              out.mesh.tris[i].uv2.y=out.mesh.tris[i].c.z;
+            for(unsigned int i=0;i<out.mesh.tricount;i++){
+              if(!uvassignedtris[i]){
+                out.mesh.tris[i].uv0.y=out.mesh.tris[i].a.z;
+                out.mesh.tris[i].uv1.y=out.mesh.tris[i].b.z;
+                out.mesh.tris[i].uv2.y=out.mesh.tris[i].c.z;
+              }
             }break;
           default:
-            DO(1)ORDIE1("unrecognized texmap_filldefault parameter")
+            ORDIE1("unrecognized texmap_filldefault parameter")
         }
         wspace(file,tmp);DO(fgetc(file)!=')')ORDIE1("expected ')' to end texmap_filldefault")
-        uvassignedtris=out.mesh.tricount;
+        for(unsigned int i=0;i<out.mesh.tricount;i++){
+          uvassignedtris[i]=1;
+        }
+        continue;
+        noparam:
+        for(unsigned int i=0;i<out.mesh.tricount;i++){
+          if(!uvassignedtris[i]){
+            #define tri out.mesh.tris[i]
+            mesh::vec3<float> n =(tri.c-tri.a).cross(tri.b-tri.a);
+            mesh::vec3<float> n1=n.cross(tri.c-tri.a);
+            mesh::vec3<float> n2=tri.c-tri.a;
+            //all centered on tri.a
+            tri.uv0={0,0};
+            tri.uv1={sqrtf(abs((n2*(tri.a-tri.c)).total())),0};
+            tri.uv2={sqrtf(abs((n2*(tri.a-tri.b)).total())),sqrtf(abs((n1*(tri.a-tri.b)).total()))};
+            #undef tri
+            uvassignedtris[i]=1;
+          }
+        }
       }
     }
-    DO(uvassignedtris!=out.mesh.tricount)ORDIE1("didn't assign enough uv coordinates")
+    DO(({unsigned i;for(i=0;i<out.mesh.tricount;i++){i+=uvassignedtris[i]?1:0;}i;})!=out.mesh.tricount)ORDIE1("didn't assign enough uv coordinates")
+    out.textures=(assets::texture_t*)malloc(sizeof(assets::texture_t)*textures.size());
+    memcpy(out.textures,&textures[0],textures.size()*sizeof(assets::texture_t));
     free(tmp);tmp=NULL;
-    free(mesh_fp);mesh_fp=NULL;free(text_fp);text_fp=NULL;
+    free(mesh_fp);mesh_fp=NULL;
+    free(uvassignedtris);uvassignedtris=NULL;
     DO(file){fclose(file);file=NULL;}else ORDIE("???")
     return out;
 #undef ORDIE1
+#undef ORTHENDIE1
   }
 
   font_t readFont(const char* name){//we could probably standardize systems of scanning files because lots of this code is reused
@@ -435,7 +540,7 @@ namespace assets {
     wspace(file,tmp);
     while(!feof(file)){
       unsigned int token_length=nspace(file,tmp);
-      DO(!token_length)ORTHENDIE(printf("\"%s\"\nat %li:",tmp,ftell(file)),"bad tokens in asset")
+      DO(!token_length)ORTHENDIE(printf("\"%s\" at %li:",tmp,ftell(file));fflush(stdout),"bad tokens in asset")
       if(token_length==14){
         if(!memcmp(tmp,"alphabet_upper",14)){
           amt=26;readTo='A';
