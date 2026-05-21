@@ -44,14 +44,13 @@ void c(){
   menu.btncount=0;
 }
 int main() {
-  puts("\033[?1049h");
   puts("\rRAT GAME 16");
   debug=fopen("./debug/debug.log","w");
   if(ferror(debug)||errno||!debug){perror("couldn't open debug log file :(");exit(1);}
   puts("LOADING MODELS");
   assets::asset3d_t model0=assets::readAsset3d("./assets/poster.rgmdl");//ari i'm going to ear you
   assets::asset3d_t model1=assets::readAsset3d("./assets/base.rgmdl");
-  puts("LOADING FONT");
+  puts("LOADING FONTS");
   assets::font_t font=assets::readFont("./assets/font/6x5.rgft");
   assets::font_t font1=assets::readFont("./assets/font/3x3.rgft");
   gui::default_font=assets::readFont("./assets/font/1x1.rgft");
@@ -78,7 +77,7 @@ int main() {
         gui::selected_btn=(gui::selected_btn+gui::selected_menu->btncount-1)%gui::selected_menu->btncount;
         break;
       }
-      case 'q':puts("\x1b[c");puts("\033[?1049l");puts("closed rat game screen");gui::stop();exit(0);break;
+      case 'q':gui::stop();exit(0);break;
     }
     if((escapes&'\x03')=='\x03'){
       switch(c){

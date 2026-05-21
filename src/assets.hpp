@@ -231,7 +231,7 @@ namespace assets {
         DO(mesh_fp[0])ORDIE1("duplicate models in asset")
         wspace(file,tmp);FEXPECTS("=",1)ORDIE("expected '=' to assign model path");wspace(file,tmp);
         token_length=readUntil(file,tmp,';');
-        printf("reading model file assets/model/%.*s:",token_length,tmp);
+        printf("  reading model file assets/model/%.*s:",token_length,tmp);
         DO(!token_length)ORDIE1("bad model filepath in asset")
         DO((13+token_length+1)>=128)ORDIE1("model filepath too long")
         tmp[token_length]='\0';
@@ -251,7 +251,7 @@ namespace assets {
         tmp[token_length]='\0';
         memcpy(text_fp,"assets/texture/",15);
         memcpy(&text_fp[15],tmp,token_length+1);
-        printf("reading texture file: %s, ",text_fp);
+        printf("  reading texture file: %s, ",text_fp);
         out.texture=readPPM(text_fp);
       }else if((token_length==6)&&!(memcmp(tmp,"texmap",6))){
         DO(!mesh_fp[0])ORDIE1("expected model before texmap")
@@ -420,16 +420,11 @@ namespace assets {
       DO(readTo){
         DO(getc(file)!='\n')ORTHENDIE(printf("expected newline at %i after %.*s!\n",ftell(file),token_length,tmp),"bad read")
         unsigned int total=0;
-        printf("%.*s:",token_length,tmp);
         if(!out.sizex[readTo]){
           for(unsigned int i=0;i<amt;i++){
             total+=(out.sizex[readTo+i]=readUntil(file,tmp,'.')+1);getc(file);
-            printf("%i,",out.sizex[readTo+i],out.sizex[readTo+i]);
           }
-          printf("\b:%i\n",total);
           DO(getc(file)!='\n')ORTHENDIE(printf("expected newline at %i after width!\n",ftell(file)),"bad read")
-        }else{
-          puts("\b ");
         }
         for(unsigned int i=0;i<out.sizey;i++){
           for(unsigned int j=0;j<amt;j++){
