@@ -37,6 +37,9 @@ assets::font_t f_avatar;
 
 assets::asset3d_t scene;
 
+assets::sprite_t sprite{};
+
+gui::menu_t mainmenu;
 gui::menu_t pausemenu;
 
 struct gamestate {
@@ -44,12 +47,9 @@ struct gamestate {
   void (*drawFunc)();
 } gamestate{};
 
-void drawStartMessage(){
-  gui::selected_menu=NULL;
-  const char* title="INITIALIZING TERMINAL ILLNESS";
-  const char* hint="move with WASD to start the display";
-  gui::scoord y=gui::putFText(&gui::f_default,title,(gui::scoord)strlen(title),2,2,gui::term_dims.ws_col-4,gui::term_dims.ws_row-4,gui::LEFT);
-  gui::putFText(&gui::f_default,hint,(gui::scoord)strlen(hint),2,y+1,gui::term_dims.ws_col-4,gui::term_dims.ws_row-y-2,gui::LEFT);
+void drawMainMenu(){
+  gui::selected_menu=&mainmenu;
+  gui::putMenu(&mainmenu,0,0);
 }
 void drawWorld(){
   if(gamestate.paused){
@@ -60,6 +60,7 @@ void drawWorld(){
     for(unsigned int i=0;i<scene.mesh.tricount;i++){
       gui::drawMTri(scene.mesh.tris[i],scene.textures[scene.tex_binds[i]]);
     }
+    if(sprite.chars&&sprite.pixels){gui::putSprite(&sprite,0,0);}
   }
 }
 void buttonContinue(){
@@ -96,7 +97,24 @@ void loadModels(){
   puts("LOADING MODELS");
   scene=assets::readAsset3d("./assets/newscene.rgmdl");//ari i'm going to ear you
 }
+void loadSprites(){
+  puts("LOADING SPRITES");
+  sprite=assets::readRGVTX("./assets/sprite/hand.rgvtx",gui::term_dims.ws_col,gui::term_dims.ws_row);
+}
 void loadMenus(){
+  mainmenu={
+    .sizex=0,.sizey=0,
+    .borders={'=','=','H','H','#'},
+    .textcount=1,.btncount=2
+  };
+  mainmenu.items=(gui::text_t*)malloc(sizeof(gui::text_t));
+  mainmenu.items[0]={&f_big,"RAT GAME 16" VERSION,(gui::scoord)strlen("RAT GAME 16" VERSION),gui::LEFT};
+  mainmenu.buttons=(gui::text_t*)malloc(sizeof(gui::text_t)*2);
+  mainmenu.funcs=(function*)malloc(sizeof(function)*2);
+  mainmenu.buttons[0]={&f_avatar,"start game",10,gui::LEFT};
+  mainmenu.funcs[0]=&buttonContinue;
+  mainmenu.buttons[1]={&f_avatar,"quit",4,gui::LEFT};
+  mainmenu.funcs[1]=&quit;
   pausemenu={
     .sizex=0,.sizey=0,
     .borders={'-','-','|','|','+'},
@@ -154,10 +172,10 @@ void tick(){
     escapes=0;
   }else{
     switch(c){
-      case 'w':gamestate.drawFunc=drawWorld;mesh::camera_position.x+=cos(rottrck);mesh::camera_position.y+=sin(rottrck);break;//ari i just looked at these
-      case 's':gamestate.drawFunc=drawWorld;mesh::camera_position.x-=cos(rottrck);mesh::camera_position.y-=sin(rottrck);break;//,,, not a big fan
-      case 'd':gamestate.drawFunc=drawWorld;mesh::camera_position.x-=sin(rottrck);mesh::camera_position.y+=cos(rottrck);break;//either put everything on radians
-      case 'a':gamestate.drawFunc=drawWorld;mesh::camera_position.x+=sin(rottrck);mesh::camera_position.y-=cos(rottrck);break;//or dont, PICK ONE
+      case 'w':if(!gui::selected_menu){mesh::camera_position.x+=cos(rottrck);mesh::camera_position.y+=sin(rottrck);}break;//ari i just looked at these
+      case 's':if(!gui::selected_menu){mesh::camera_position.x-=cos(rottrck);mesh::camera_position.y-=sin(rottrck);}break;//,,, not a big fan
+      case 'd':if(!gui::selected_menu){mesh::camera_position.x-=sin(rottrck);mesh::camera_position.y+=cos(rottrck);}break;//either put everything on radians
+      case 'a':if(!gui::selected_menu){mesh::camera_position.x+=sin(rottrck);mesh::camera_position.y-=cos(rottrck);}break;//or dont, PICK ONE
       case ',':mesh::camera_position.z++;break;
       case '.':mesh::camera_position.z--;break;
       case 'e':logmisc=!logmisc;break;
@@ -187,9 +205,10 @@ int main() {
   loadFonts();
   loadModels();
   loadMenus();
-  gamestate.drawFunc=drawStartMessage;
+  gamestate.drawFunc=drawMainMenu;
   gui::init();
-  gui::selected_menu=NULL;
+  loadSprites();
+  gui::selected_menu=&mainmenu;
   gui::selected_btn=0;
   drawCurrentFrame();
 #ifdef __EMSCRIPTEN__

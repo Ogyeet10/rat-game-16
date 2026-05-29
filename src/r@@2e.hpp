@@ -27,7 +27,7 @@
 #define STATE_CBUF 0b00001000
 #define STATE_DBUF 0b00010000
 #define STATE_BBUF 0b00100000
-#define STATE_ASCR 0b01000000
+#define STATE_PMDS 0b01000000
 #define STATE_ICLR 0b10000000
 namespace gui {
   menu_t* selected_menu;
@@ -105,8 +105,8 @@ namespace gui {
     if(err){perror(err);}
     state|=STATE_ICLR;
 #else
-    BRKST(ASCR,printf("\x1b[c""\x1b""[?1049l");)
-    printf("CURING TERMINAL ILLNESS\n\r");
+    BRKST(PMDS,printf("\x1b[c""\x1b""[?1049l\x1b[?25h");)//lowkirk don't know what the [c is for but
+    printf("CURING TERMINAL ILLNESS\n\r");//it breaks without it
     BRKST(SIGS,
       printf("\x1b""[0mrestoring sigset\n\r");
       if(sigprocmask(SIG_SETMASK,&old_sigset,NULL)==-1){perror("couldn't restore signal set");}
@@ -128,7 +128,7 @@ namespace gui {
   void stop() {stop(NULL);}
 
 #ifndef __EMSCRIPTEN__
-  void sig_handler(int sig){//lowk forgot to make this part work but like who cares
+  void sig_handler(int sig){//not using mode bit ISIG so doesn't proc (i think)
     printf("bazinga%u",sig);
     FILE* g = fopen("log","w+");
     fprintf(g,"%u\n",sig);
@@ -212,14 +212,14 @@ namespace gui {
 
     //enable alternate screen buffer
     //https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797#common-private-modes
-    printf("\x1b[?1049h\x1b[48;2;0;0;0m\x1b[2J");
-    state|=STATE_ASCR;
+    printf("\x1b[?1049h\x1b[?25l\x1b[48;2;0;0;0m\x1b[2J");
+    state|=STATE_PMDS;
 
     //set various terminal flags
     cur_term_state=old_term_state;
     cur_term_state.c_cflag|=CS8;//make sure 8 bit width characters
     cur_term_state.c_cc[VMIN] =0;//double 0 means return asap and 0 if nothing's available
-    cur_term_state.c_cc[VTIME]=0;
+    cur_term_state.c_cc[VTIME]=0;//(non blocking input reads)
     DO(set_term_flags(RAWMODE_LFLAGS,RAWMODE_IFLAGS,RAWMODE_OFLAGS))ORDIE("couldn't set terminal state");
     state|=STATE_TERM;
 
@@ -280,7 +280,7 @@ namespace gui {
   inline const scoord toSSPX(T x,T d){return (scoord)((x/d+1)*term_dims.ws_col/2);}
   template<typename T> requires (std::is_arithmetic_v<T>)&&(std::is_signed_v<T>)
   inline const scoord toSSPY(T y,T d){return (scoord)((y/d+1)*term_dims.ws_row/2);}
-  inline const scoord toSSPI(scoord x,scoord y){return min((y*term_dims.ws_col)+x,max_chars);}
+  inline const scoord toSSPI(scoord x,scoord y){return min(y,term_dims.ws_row-1)*term_dims.ws_col+min(x,term_dims.ws_col-1);}
 
   char putChar(scoord x,scoord y,unsigned char c){
     scoord p=toSSPI(x,y);
@@ -371,7 +371,6 @@ namespace gui {
     return y;
 #undef align_stuff
   }
-
   scoord putFText(gui::text_t text,scoord x,scoord y,scoord width,scoord height){
     return putFText(text.font,text.text,text.length,x,y,width,height,text.alignment);
   }
@@ -406,6 +405,23 @@ namespace gui {
       putChar(x+2,y2,' ');
       color_buffer[toSSPI(x+1,y2)]=default_color;
       color_buffer[toSSPI(x+2,y2)]=default_color;
+    }
+  }
+  void putSprite(assets::sprite_t* sprite,scoord x,scoord y){
+    if((x>term_dims.ws_col)||(y>term_dims.ws_row)){return;}
+    for(scoord y1=0;(y1<term_dims.ws_row-y)&&(y1<sprite->height);y1++){
+      // c=0;while(!isprint(sprite->chars[y*sprite->width+c])){c++;/*holy shit lois*/}
+      // memcpy(&term_buffer[toSSPI(x,y1+y)],&sprite->chars[y1*sprite->width],min(sprite->width,(unsigned)(term_dims.ws_col-x)));
+      for(scoord x1=0;(x1<sprite->width)&&(x1<(term_dims.ws_col-x));x1++){
+        if(isprint(sprite->chars[y1*sprite->width+x1])){
+          unsigned char r=sprite->pixels[3*((y1*sprite->width)+x1)],
+          g=sprite->pixels[3*((y1*sprite->width)+x1)+1],
+          b=sprite->pixels[3*((y1*sprite->width)+x1)+2];
+          char c=(r>128)|((g>128)<<1)|((b>128)<<2)|(((r+g+b)>(255.0f*3/2))<<3);
+          putColor(x1+x,term_dims.ws_row-y1+y,colors::col((colors::color)c,colors::black));
+          putChar(x1+x,term_dims.ws_row-y1+y,sprite->chars[y1*sprite->width+x1]);
+        }
+      }
     }
   }
 
@@ -459,9 +475,10 @@ namespace gui {
     fputs(ansi_bg(color_buffer[0],buf),stdout);
     for(scoord i=1;i<max_chars;i++){//could def use optimization to minimize color calls (combine fg & bg,
       bool fg_change=((color_buffer[i]&0x0F)!=last_color_fg);//minimize write ops)
-      bool bg_change=((color_buffer[i]&0xF0)!=last_color_bg);
-      if(fg_change||bg_change){
+      bool bg_change=((color_buffer[i]&0xF0)!=last_color_bg);//keep prev frame buffer and move cursor around
+      if(fg_change||bg_change){//to minimize bytes written when only changing a bit of screen
         fwrite(term_buffer+last_char,1,i-last_char,stdout);
+        fputs("\x1b[22m",stdout);
         if(fg_change){
           last_color_fg=color_buffer[i];
           if(bg_change){

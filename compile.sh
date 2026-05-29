@@ -1,19 +1,15 @@
-# echo "" > log.txt
-# echo ${@}
-# exit 0
 mkdir debug 2>/dev/null
 if [ "$1" = "debug" ];then
   if [ "$2" = "preprocess" ];then
     echo preprocessing
-    gcc -std="c++20" -I./src ./src/main.cc -g -E -lstdc++ -lm -o ./debug/debug.i 2>log.txt
-    if [ $(stat -c%s ./log.txt) -gt 1 ];then
+    if ! gcc -std="c++20" -I./src ./src/main.cc -g -E -lstdc++ -lm -o ./debug/debug.i 2>log.txt; then
       echo preprocessing failure
       exit 1
     fi
     echo preprocessing success
   else
-    gcc -std="c++20" -I./src -g ./src/main.cc -lstdc++ -lm -o ./debug/debug.out 2>log.txt #change something maybe
-    if test $(stat -c%s ./log.txt) -gt 1; then
+    echo compiling debug
+    if ! gcc -std="c++20" -I./src -g ./src/main.cc -lstdc++ -lm -o ./debug/debug.out 2>log.txt; then #change something maybe
       echo debug didn\'t compile \:\(
       cat log.txt
       exit 1
@@ -31,8 +27,8 @@ if [ "$1" = "debug" ];then
   fi
   exit 0
 fi
-gcc -std="c++20" -Wall -I./src ./src/main.cc -lstdc++ -lm 2>log.txt
-if test $(stat -c%s ./log.txt) -gt 1; then
+echo compiling
+if ! gcc -std="c++20" -Wall -I./src ./src/main.cc -lstdc++ -lm 2>log.txt; then
   echo didn\'t compile \:\(
   cat log.txt
   exit 1
