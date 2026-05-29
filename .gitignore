@@ -3,5 +3,6 @@ a.out
 notes
 log.txt
 debug/*
+dist/
 *.swp
 saved

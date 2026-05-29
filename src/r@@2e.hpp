@@ -1,10 +1,14 @@
 #ifndef RATATOUILLE_H//we're just going to write a disgusting header only library
 #define RATATOUILLE_H//ratatouille is now our linux-only version. will do portability with windows later.
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#else
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <termios.h>
 #include <unistd.h>
 #include <signal.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -30,26 +34,38 @@ namespace gui {
   scoord selected_btn;
   using namespace colors;
 
+#ifndef __EMSCRIPTEN__
   const tcflag_t RAWMODE_LFLAGS=~(ECHO|ICANON|/*ISIG|*/IEXTEN),//remember that ~ is bitwise not
                  RAWMODE_IFLAGS=~(BRKINT|ICRNL|INPCK|ISTRIP|IXON),
                  RAWMODE_OFLAGS=~(OPOST);//terminal bits to set for "raw" mode
   const int BLOCKED_SIGS=SIGTTOU|SIGSTOP|SIGTTIN|SIGTSTP;
+#endif
 
   assets::font_t f_default;
 
   char state='\0';//see macros for which bits mean what
 
   //information about the terminal's settings
+#ifdef __EMSCRIPTEN__
+  struct browser_winsize{unsigned short ws_row,ws_col;};
+#else
   struct termios old_term_state{};
   struct termios cur_term_state{};
   struct timeval input_timeout{0,0};//wait for NOTHING
+#endif
 
   //signals to make sure we can ignore things we don't like, like someone telling the program to stop
+#ifndef __EMSCRIPTEN__
   sigset_t old_sigset;
   sigset_t cur_sigset;
+#endif
   
   //screen data. once things get multithreaded, make volatile
+#ifdef __EMSCRIPTEN__
+  browser_winsize term_dims;
+#else
   struct winsize term_dims;//represents current terminal dimensions. has fields ws_row and ws_col. should change
+#endif
   char* term_buffer=NULL;
   unsigned char* depth_buffer=NULL;
   color_t* color_buffer=NULL;
@@ -71,15 +87,24 @@ namespace gui {
   #else
     #define printd(...)
   #endif
+#ifndef __EMSCRIPTEN__
   int set_term_flags(tcflag_t fl,tcflag_t fi,tcflag_t fo){
     cur_term_state.c_lflag&=fl;
     cur_term_state.c_iflag&=fi;
     cur_term_state.c_oflag&=fo;
     return (tcsetattr(STDIN_FILENO,TCSAFLUSH,&cur_term_state));
   }
+#endif
 
   void stop(const char* err){
     if(state&STATE_ICLR){return;}
+#ifdef __EMSCRIPTEN__
+    BRKST(TBUF,if(term_buffer){free(term_buffer);term_buffer=NULL;max_chars=0;})
+    BRKST(CBUF,if(color_buffer){free(color_buffer);color_buffer=NULL;})
+    BRKST(DBUF,if(depth_buffer){free(depth_buffer);depth_buffer=NULL;})
+    if(err){perror(err);}
+    state|=STATE_ICLR;
+#else
     BRKST(ASCR,printf("\x1b[c""\x1b""[?1049l");)
     printf("CURING TERMINAL ILLNESS\n\r");
     BRKST(SIGS,
@@ -98,23 +123,87 @@ namespace gui {
     #endif
     if(err){perror(err);}
     state|=STATE_ICLR;
+#endif
   }
   void stop() {stop(NULL);}
 
+#ifndef __EMSCRIPTEN__
   void sig_handler(int sig){//lowk forgot to make this part work but like who cares
     printf("bazinga%u",sig);
     FILE* g = fopen("log","w+");
     fprintf(g,"%u\n",sig);
     fclose(g);
   }
+#endif
+
+#ifdef __EMSCRIPTEN__
+  scoord browserCols(){
+    return (scoord)EM_ASM_INT({
+      var screen = document.getElementById("rat-screen");
+      if (!screen) return 120;
+      var cs = getComputedStyle(screen);
+      var probe = document.getElementById("rat-measure");
+      if (!probe) {
+        probe = document.createElement("span");
+        probe.id = "rat-measure";
+        probe.textContent = "M";
+        probe.style.position = "absolute";
+        probe.style.visibility = "hidden";
+        probe.style.whiteSpace = "pre";
+        screen.appendChild(probe);
+      }
+      probe.style.font = cs.font;
+      probe.style.lineHeight = cs.lineHeight;
+      var rect = screen.getBoundingClientRect();
+      var probeRect = probe.getBoundingClientRect();
+      var padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      return Math.max(20, Math.floor((rect.width - padding) / Math.max(1, probeRect.width)));
+    });
+  }
+
+  scoord browserRows(){
+    return (scoord)EM_ASM_INT({
+      var screen = document.getElementById("rat-screen");
+      if (!screen) return 40;
+      var cs = getComputedStyle(screen);
+      var probe = document.getElementById("rat-measure");
+      if (!probe) return 40;
+      var rect = screen.getBoundingClientRect();
+      var probeRect = probe.getBoundingClientRect();
+      var padding = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      return Math.max(12, Math.floor((rect.height - padding) / Math.max(1, probeRect.height)));
+    });
+  }
+
+  void resizeBrowserBuffers(){
+    scoord cols=browserCols();
+    scoord rows=browserRows();
+    if(term_buffer&&color_buffer&&depth_buffer&&cols==term_dims.ws_col&&rows==term_dims.ws_row){return;}
+    term_dims.ws_col=cols;
+    term_dims.ws_row=rows;
+    max_chars=term_dims.ws_col*term_dims.ws_row;
+    term_buffer=(char*)realloc(term_buffer,max_chars);
+    color_buffer=(color_t*)realloc(color_buffer,max_chars*sizeof(color_t));
+    depth_buffer=(unsigned char*)realloc(depth_buffer,max_chars);
+    DO(!term_buffer||!color_buffer||!depth_buffer)ORDIE("couldn't resize browser buffers")
+    state|=STATE_TBUF|STATE_CBUF|STATE_DBUF;
+  }
+#endif
 
   void clear_scr() {
+#ifdef __EMSCRIPTEN__
+    resizeBrowserBuffers();
+#endif
     for(scoord i=0;i<max_chars;i++){term_buffer[i]=' ';depth_buffer[i]=255;color_buffer[i]=default_color;}
   }
 
   void init(){
     //make sure we're not doing things twice. idiot.
     DO(state)ORDIE("couldn't init r@@2e: we already started");
+#ifdef __EMSCRIPTEN__
+    resizeBrowserBuffers();
+    clear_scr();
+#else
     puts("INITIALIZING TERMINAL ILLNESS");
     atexit(stop);
 
@@ -150,19 +239,40 @@ namespace gui {
     #ifdef do_debug
     tryalloc(debug,char*,term_dims.ws_col,BBUF);
     #endif
-#undef tryalloc
+    #undef tryalloc
     clear_scr();
     // struct sigaction t;
     // DO(sigaction(SIGTTOU,&t,NULL)==-1)ORDIE("couldn't examine action for ttou"); //double check things work later
+#endif
   }
 
+#ifdef __EMSCRIPTEN__
+  char input_queue[64]{};
+  unsigned char input_read=0,input_write=0;
+  void queueInput(char c){
+    unsigned char next=(input_write+1)%sizeof(input_queue);
+    if(next!=input_read){input_queue[input_write]=c;input_write=next;}
+  }
+#endif
+
   bool hasInput(){
+#ifdef __EMSCRIPTEN__
+    return input_read!=input_write;
+#else
     static fd_set fds;FD_SET(STDIN_FILENO,&fds);//ts shit is not thread safe probably
     return select(STDIN_FILENO+1, &fds, NULL, NULL,&input_timeout);
+#endif
   }
   char readInput(){
     char out='\0';
+#ifdef __EMSCRIPTEN__
+    if(input_read!=input_write){
+      out=input_queue[input_read];
+      input_read=(input_read+1)%sizeof(input_queue);
+    }
+#else
     read(STDIN_FILENO, &out, 1);//mm write to stack always feels weird
+#endif
     return out;
   }
 
@@ -300,6 +410,44 @@ namespace gui {
   }
 
   void drawFrame(){
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+      var screen = document.getElementById('rat-screen');
+      if (!screen) return;
+      var ptr = $0;
+      var len = $1;
+      var cols = $2;
+      var colorPtr = $3;
+      var colors = "#000000 #800000 #008000 #806000 #000080 #800080 #008080 #c0c0c0 #808080 #ff4040 #40ff40 #ffff40 #4040ff #ff40ff #40ffff #ffffff".split(" ");
+      function esc(code) {
+        if (code === 38) return "&amp;";
+        if (code === 60) return "&lt;";
+        if (code === 62) return "&gt;";
+        return String.fromCharCode(code);
+      }
+      var html = "";
+      for (var y = 0; y * cols < len; y++) {
+        var start = ptr + y * cols;
+        var end = Math.min(start + cols, ptr + len);
+        var fg = -1;
+        var open = false;
+        for (var p = start; p < end; p++) {
+          var c = HEAPU8[colorPtr + p - ptr];
+          var nfg = c & 15;
+          if (nfg !== fg) {
+            if (open) html += "</span>";
+            html += "<span style=\"color:" + colors[nfg] + "\">";
+            open = true;
+            fg = nfg;
+          }
+          html += esc(HEAPU8[p]);
+        }
+        if (open) html += "</span>";
+        if ((y + 1) * cols < len) html += "\n";
+      }
+      screen.innerHTML = html;
+    },term_buffer,max_chars,term_dims.ws_col,color_buffer);
+#else
     DO(fwrite("\x1b[2J\x1b[0;0H\x1b[0m",1,10,stdout)<10)ORDIE("couldn't write control codes to terminal");
     color_t last_color_fg=color_buffer[0]&0x0F;//why the FUCK would he have bits 3 and 4 be
     color_t last_color_bg=color_buffer[0]&0xF0;//brightness instead of 3 and 7 like a normal person
@@ -337,10 +485,10 @@ namespace gui {
     free(buf);
     // fseek(stdout,-1,SEEK_CUR);
     fflush(stdout);
+#endif
   }
 }
 #undef DO
 #undef ORDIE
 #undef BRKST
 #endif
-

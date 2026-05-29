@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>rat game 16</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #090704;
+        color: #f4e8bc;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      }
+      html {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        height: 100%;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(127, 88, 33, 0.25), transparent 35rem),
+          linear-gradient(135deg, #090704, #161007 60%, #050403);
+      }
+      main {
+        box-sizing: border-box;
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        padding: 0.75rem;
+      }
+      #rat-screen {
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 1rem;
+        overflow: hidden;
+        white-space: pre;
+        font-size: clamp(7px, 0.68vw, 12px);
+        line-height: 1;
+        border: 1px solid rgba(244, 232, 188, 0.2);
+        box-shadow: 0 1rem 4rem rgba(0, 0, 0, 0.45), inset 0 0 4rem rgba(166, 119, 45, 0.08);
+        background: rgba(5, 4, 3, 0.72);
+      }
+      #status {
+        position: absolute;
+        right: 1.25rem;
+        bottom: 1rem;
+        max-width: calc(100% - 2.5rem);
+        padding: 0.35rem 0.5rem;
+        color: #bfa56b;
+        font-size: 0.875rem;
+        background: rgba(5, 4, 3, 0.78);
+        border: 1px solid rgba(244, 232, 188, 0.12);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <pre id="rat-screen">loading rat game...</pre>
+      <div id="status">controls: wasd move, arrows rotate/far plane, enter select, [/] menu, esc pause, q quit</div>
+    </main>
+    <script>
+      var Module = {
+        print: function(text) { console.log(text); },
+        printErr: function(text) { console.error(text); }
+      };
+
+      function sendKey(code) {
+        if (Module.ccall) Module.ccall('rat_key', null, ['number'], [code]);
+      }
+
+      function sendSequence(codes) {
+        for (var i = 0; i < codes.length; i++) sendKey(codes[i]);
+      }
+
+      document.addEventListener('keydown', function(event) {
+        if (event.repeat) return;
+        switch (event.key) {
+          case 'ArrowUp': sendKey(91); break;
+          case 'ArrowDown': sendKey(93); break;
+          case 'ArrowRight': sendSequence([27, 91, 67]); break;
+          case 'ArrowLeft': sendSequence([27, 91, 68]); break;
+          case 'Enter': sendKey(13); break;
+          case 'Escape': sendKey(27); break;
+          default:
+            if (event.key.length === 1) sendKey(event.key.charCodeAt(0));
+            else return;
+        }
+        event.preventDefault();
+      });
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>

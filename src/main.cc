@@ -9,9 +9,13 @@
 #include <type_traits>
 #include <cmath>
 #include <time.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 FILE* debug;
 typedef void (*function)(void);
 bool logmisc=false;
+bool game_running=true;
 template<typename T> concept arith=std::is_arithmetic_v<T>;
 template<typename T> concept comp =requires(T a,T b){a<b;a>b;};
 template<comp T,comp U> T constexpr const min(T a,U b){return a<b?a:b;}
@@ -33,7 +37,6 @@ assets::font_t f_avatar;
 
 assets::asset3d_t scene;
 
-gui::menu_t mainmenu;
 gui::menu_t pausemenu;
 
 struct gamestate {
@@ -41,13 +44,19 @@ struct gamestate {
   void (*drawFunc)();
 } gamestate{};
 
-void drawMainMenu(){
-  gui::putMenu(&mainmenu,0,0);
+void drawStartMessage(){
+  gui::selected_menu=NULL;
+  const char* title="INITIALIZING TERMINAL ILLNESS";
+  const char* hint="move with WASD to start the display";
+  gui::scoord y=gui::putFText(&gui::f_default,title,(gui::scoord)strlen(title),2,2,gui::term_dims.ws_col-4,gui::term_dims.ws_row-4,gui::LEFT);
+  gui::putFText(&gui::f_default,hint,(gui::scoord)strlen(hint),2,y+1,gui::term_dims.ws_col-4,gui::term_dims.ws_row-y-2,gui::LEFT);
 }
 void drawWorld(){
   if(gamestate.paused){
+    gui::selected_menu=&pausemenu;
     gui::putMenu(&pausemenu,0,0);
   }else{
+    gui::selected_menu=NULL;
     for(unsigned int i=0;i<scene.mesh.tricount;i++){
       gui::drawMTri(scene.mesh.tris[i],scene.textures[scene.tex_binds[i]]);
     }
@@ -58,9 +67,24 @@ void buttonContinue(){
   gamestate.paused=0;
 }
 void quit(){
+  game_running=false;
   gui::stop();
+#ifdef __EMSCRIPTEN__
+  emscripten_cancel_main_loop();
+  EM_ASM({
+    var screen = document.getElementById('rat-screen');
+    if (screen) screen.textContent = 'rat game stopped';
+  });
+#else
   exit(0);
+#endif
 }
+
+#ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE void rat_key(int key){
+  gui::queueInput((char)key);
+}
+#endif
 
 void loadFonts(){
   puts("LOADING FONTS");
@@ -73,20 +97,6 @@ void loadModels(){
   scene=assets::readAsset3d("./assets/newscene.rgmdl");//ari i'm going to ear you
 }
 void loadMenus(){
-  mainmenu={
-    .sizex=0,.sizey=0,
-    .borders={'=','=','H','H','#'},
-    .textcount=1,.btncount=2
-  };
-  mainmenu.items=(gui::text_t*)malloc(sizeof(gui::text_t));
-  mainmenu.items[0]={&f_big,"RAT GAME 16" VERSION,strlen("RAT GAME 16" VERSION),gui::LEFT};
-  // mainmenu.items[1]={NULL,"now with variably aligned text",30,gui::CENTER};
-  mainmenu.buttons=(gui::text_t*)malloc(sizeof(gui::text_t)*2);
-  mainmenu.funcs=(function*)malloc(sizeof(function)*2);
-  mainmenu.buttons[0]={&f_avatar,"start game",10,gui::LEFT};
-  mainmenu.funcs[0]=&buttonContinue;
-  mainmenu.buttons[1]={&f_avatar,"quit",4,gui::LEFT};
-  mainmenu.funcs[1]=&quit;
   pausemenu={
     .sizex=0,.sizey=0,
     .borders={'-','-','|','|','+'},
@@ -102,71 +112,95 @@ void loadMenus(){
   pausemenu.funcs[1]=&quit;
 }
 
+unsigned char escapes=0;
+unsigned char rotamnt=16;
+float rotamntrad = (rotamnt/128.0f)*M_PI;
+float rottrck=0;
+
+void drawCurrentFrame(){
+  clock_t t=clock();
+  gui::clear_scr();
+  if(gamestate.drawFunc){gamestate.drawFunc();}
+  gui::drawFrame();
+  clock_t t1=clock()-t;
+  float s=t1/(float)CLOCKS_PER_SEC;
+  if(debug&&s>0.1){
+    fprintf(debug,"took %.3fs to draw a frame!!!\n",s);
+  }
+}
+
+void tick(){
+  if(!game_running){return;}
+  char c=gui::readInput();
+  if(c=='q'){quit();return;}
+  switch(c){//escapey bits. add more later probably. note that tmux is doing strange things to us
+    case '\e':escapes|='\x01';return;
+    case '[' :if((escapes&'\x03')=='\x01'){escapes|='\x02';return;}else{//am i getting ear'd for this one
+      if(gui::selected_menu&&gui::selected_menu->btncount){gui::selected_btn=(gui::selected_btn+gui::selected_menu->btncount-1)%gui::selected_menu->btncount;}
+      break;
+    }
+  }
+  if((escapes&'\x03')=='\x03'){
+    switch(c){
+      case 'A':mesh::farplanex++;break;
+      case 'B':mesh::farplanex--;break;
+      case 'C':mesh::camera_rotation.z-=rotamnt;rottrck+=rotamntrad;break;//left
+      case 'D':mesh::camera_rotation.z+=rotamnt;rottrck-=rotamntrad;break;//right
+    }
+    if(rottrck > 2*M_PI){rottrck-=2*M_PI;}
+    if(rottrck < 0){rottrck+=2*M_PI;}
+    if(mesh::camera_rotation.z > 256){mesh::camera_rotation.z-=256;}
+    if(mesh::camera_rotation.z < -256){mesh::camera_rotation.z+=256;}
+    escapes=0;
+  }else{
+    switch(c){
+      case 'w':gamestate.drawFunc=drawWorld;mesh::camera_position.x+=cos(rottrck);mesh::camera_position.y+=sin(rottrck);break;//ari i just looked at these
+      case 's':gamestate.drawFunc=drawWorld;mesh::camera_position.x-=cos(rottrck);mesh::camera_position.y-=sin(rottrck);break;//,,, not a big fan
+      case 'd':gamestate.drawFunc=drawWorld;mesh::camera_position.x-=sin(rottrck);mesh::camera_position.y+=cos(rottrck);break;//either put everything on radians
+      case 'a':gamestate.drawFunc=drawWorld;mesh::camera_position.x+=sin(rottrck);mesh::camera_position.y-=cos(rottrck);break;//or dont, PICK ONE
+      case ',':mesh::camera_position.z++;break;
+      case '.':mesh::camera_position.z--;break;
+      case 'e':logmisc=!logmisc;break;
+      case ']':if(gui::selected_menu&&gui::selected_menu->btncount){gui::selected_btn=(gui::selected_btn+1)%gui::selected_menu->btncount;}break;
+      case '\r':
+        if(gui::selected_menu&&gui::selected_menu->funcs&&gui::selected_menu->funcs[gui::selected_btn]){
+          gui::selected_menu->funcs[gui::selected_btn]();
+        }break;//could do something with \n too but idk how the input formatting works
+    }
+    if(!game_running){return;}
+    if(escapes&'\x01'){gamestate.paused=!gamestate.paused;}
+  }
+  if(c||escapes){
+    drawCurrentFrame();
+    escapes=0;
+  }
+}
+
 int main() {
   puts("RAT GAME 16");
+#ifdef __EMSCRIPTEN__
+  debug=stderr;
+#else
   debug=fopen("./debug/debug.log","w");
   if(ferror(debug)||errno||!debug){perror("couldn't open debug log file :(");exit(1);}
+#endif
   loadFonts();
   loadModels();
   loadMenus();
-  gamestate.drawFunc=drawMainMenu;
+  gamestate.drawFunc=drawStartMessage;
   gui::init();
-  unsigned char escapes=0;
-  unsigned char rotamnt=16;
-  float rotamntrad = (rotamnt/128.0f)*M_PI;
-  float rottrck=0;
-  gui::selected_menu=&pausemenu;
+  gui::selected_menu=NULL;
   gui::selected_btn=0;
+#ifdef __EMSCRIPTEN__
+  drawCurrentFrame();
+  emscripten_set_main_loop(tick,0,1);
+#else
   while(true){
-    char c=gui::readInput();
-    if(c=='q'){quit();}
-    switch(c){//escapey bits. add more later probably. note that tmux is doing strange things to us
-      case '\e':escapes|='\x01';continue;
-      case '[' :if((escapes&'\x03')=='\x01'){escapes|='\x02';continue;}else{//am i getting ear'd for this one
-        gui::selected_btn=(gui::selected_btn+gui::selected_menu->btncount-1)%gui::selected_menu->btncount;
-        break;
-      }
-    }
-    if((escapes&'\x03')=='\x03'){
-      switch(c){
-        case 'A':mesh::farplanex++;break;
-        case 'B':mesh::farplanex--;break;
-        case 'C':mesh::camera_rotation.z-=rotamnt;rottrck+=rotamntrad;break;//left
-        case 'D':mesh::camera_rotation.z+=rotamnt;rottrck-=rotamntrad;break;//right
-      }
-      if(rottrck > 2*M_PI){rottrck-=2*M_PI;}
-      if(rottrck < 2*M_PI){rottrck+=2*M_PI;}
-      escapes=0;
-    }else{
-      switch(c){
-        case 'w':mesh::camera_position.x+=cos(rottrck);mesh::camera_position.y+=sin(rottrck);break;//ari i just looked at these
-        case 's':mesh::camera_position.x-=cos(rottrck);mesh::camera_position.y-=sin(rottrck);break;//,,, not a big fan
-        case 'd':mesh::camera_position.x-=sin(rottrck);mesh::camera_position.y+=cos(rottrck);break;//either put everything on radians
-        case 'a':mesh::camera_position.x+=sin(rottrck);mesh::camera_position.y-=cos(rottrck);break;//or dont, PICK ONE
-        case ',':mesh::camera_position.z++;break;
-        case '.':mesh::camera_position.z--;break;
-        case 'e':logmisc=!logmisc;break;
-        case ']':gui::selected_btn=(gui::selected_btn+1)%gui::selected_menu->btncount;break;
-        case '\r':
-          if(gui::selected_menu&&gui::selected_menu->funcs&&gui::selected_menu->funcs[gui::selected_btn]){
-            gui::selected_menu->funcs[gui::selected_btn]();
-          }break;//could do something with \n too but idk how the input formatting works
-      }
-      if(escapes&'\x01'){gamestate.paused=!gamestate.paused;}
-    }
-    if(c||escapes){
-      clock_t t=clock();
-      gui::clear_scr();
-      if(gamestate.drawFunc){gamestate.drawFunc();}
-      gui::drawFrame();
-      clock_t t1=clock()-t;
-      float s=t1/(float)CLOCKS_PER_SEC;
-      if(s>0.1){
-        fprintf(debug,"took %.3fs to draw a frame!!!\n",s);
-      }
-      escapes=0;
-    }
+    tick();
   }
+#endif
+#ifndef __EMSCRIPTEN__
   fclose(debug);
+#endif
   return 0;
 }//WHAT ARE YOU DOING

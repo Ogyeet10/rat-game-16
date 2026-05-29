@@ -14,8 +14,17 @@ or cuda idk anything actually
 - the whole 3d thing is a little bit good maybe (shading,
   depth, textures, clipping (still need to do frustum culling
   though))
-                      things we might do
+                       things we might do
 - add content
 - add gameplay
 - ???
 - profit
+
+                         wasm build
+install emscripten, then run:
+
+  ./compile-wasm.sh
+
+serve the repo root and open demo.html, or serve ./dist/wasm and
+open index.html. the build preloads the assets folder into
+emscripten's virtual filesystem.
