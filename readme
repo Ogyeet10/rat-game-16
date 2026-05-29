@@ -28,3 +28,6 @@ install emscripten, then run:
 serve the repo root and open demo.html, or serve ./dist/wasm and
 open index.html. the build preloads the assets folder into
 emscripten's virtual filesystem.
+
+vercel uses vercel-build.sh to install emscripten when needed,
+run compile-wasm.sh, and deploy dist/wasm.

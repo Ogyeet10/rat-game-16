@@ -1,0 +1,6 @@
+{
+  "buildCommand": "sh ./vercel-build.sh",
+  "outputDirectory": "dist/wasm",
+  "installCommand": "",
+  "framework": null
+}
