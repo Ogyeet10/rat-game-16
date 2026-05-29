@@ -6,3 +6,5 @@ debug/*
 dist/
 *.swp
 saved
+.vercel
+.env*.local
