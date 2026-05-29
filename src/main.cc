@@ -191,8 +191,8 @@ int main() {
   gui::init();
   gui::selected_menu=NULL;
   gui::selected_btn=0;
-#ifdef __EMSCRIPTEN__
   drawCurrentFrame();
+#ifdef __EMSCRIPTEN__
   emscripten_set_main_loop(tick,0,1);
 #else
   while(true){

@@ -80,16 +80,12 @@ namespace assets {
         if((tri.c-tri.a).cross(tri.b-tri.a).magnitude()>0.1){tris.push_back(tri);}
       }
     }else{//ascii stl
-      unsigned short int l=strlen(&tmp[i]-5);
-      char* name=(char*)malloc(l+1);
-      memcpy(name,&tmp[i+5],l);name[l]='\0';
       while(!feof(file)){
         fgets(tmp,128,file);
         DO(ferror(file))ORDIE("ferror 2");
         i=0;
         WSPACEL(i);
         if(!memcmp(&tmp[i],"endsolid",8)){
-          FEXPECTL(name,l)ORDIE("couldn't read stl file: bad ending");
           break;
         }
         FEXPECTL("outer loop",10)ORDIE("couldn't read stl file: expected outer loop")

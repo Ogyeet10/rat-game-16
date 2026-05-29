@@ -13,7 +13,8 @@ namespace colors {
       else{snprintf(buf,6,"\x1b""[%.2dm",  (c&0x07)+30);return buf;}//fg not bright
     }
   }
-  constexpr char* ansi_bg(char c,char* buf){
-    snprintf(buf,6,"\x1b""[%.2dm",  ((c>>5)&0x07)+40);return buf;//something mean
+  inline char* ansi_bg(char c,char* buf){
+    if(((c>>5)&0x07)==black){snprintf(buf,20,"\x1b""[48;2;0;0;0m");return buf;}
+    snprintf(buf,20,"\x1b""[%.2dm",  ((c>>5)&0x07)+40);return buf;//something mean
   }
 }

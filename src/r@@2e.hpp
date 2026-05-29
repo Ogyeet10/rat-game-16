@@ -212,7 +212,7 @@ namespace gui {
 
     //enable alternate screen buffer
     //https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797#common-private-modes
-    printf("\x1b[?1049h");
+    printf("\x1b[?1049h\x1b[48;2;0;0;0m\x1b[2J");
     state|=STATE_ASCR;
 
     //set various terminal flags
@@ -448,12 +448,13 @@ namespace gui {
       screen.innerHTML = html;
     },term_buffer,max_chars,term_dims.ws_col,color_buffer);
 #else
-    DO(fwrite("\x1b[2J\x1b[0;0H\x1b[0m",1,10,stdout)<10)ORDIE("couldn't write control codes to terminal");
+    static const char frame_reset[]="\x1b[0m\x1b[48;2;0;0;0m\x1b[2J\x1b[0;0H";
+    DO(fwrite(frame_reset,1,sizeof(frame_reset)-1,stdout)<sizeof(frame_reset)-1)ORDIE("couldn't write control codes to terminal");
     color_t last_color_fg=color_buffer[0]&0x0F;//why the FUCK would he have bits 3 and 4 be
     color_t last_color_bg=color_buffer[0]&0xF0;//brightness instead of 3 and 7 like a normal person
     scoord last_char=0;
-    char* buf=(char*)malloc(8);
-    buf[7]='\0';
+    char* buf=(char*)malloc(20);
+    buf[19]='\0';
     fputs(ansi_fg(color_buffer[0],buf),stdout); // dont ignore the first color, becouse acctualy, we need these
     fputs(ansi_bg(color_buffer[0],buf),stdout);
     for(scoord i=1;i<max_chars;i++){//could def use optimization to minimize color calls (combine fg & bg,
