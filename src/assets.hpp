@@ -198,55 +198,74 @@ namespace assets {
     return tris;
   }
   static texture_t readPPM(const char* filename){
-    texture_t out;
-    FILE* file=fopen(filename, "r");
+    texture_t out{};
+    FILE* file=fopen(filename, "rb");
     char* tmp = (char*)malloc(128);
-    DO(!file){fflush(stdout);perror("couldn't open texture file for read");return default_texture;errno=0;};
-    int width, height, maxVal;
+    auto fail=[&](const char* message){
+      if(message){fprintf(stderr,"%s: %s\n",filename,message);}
+      if(out.pixels){free(out.pixels);out.pixels=NULL;}
+      if(tmp){free(tmp);tmp=NULL;}
+      if(file){fclose(file);file=NULL;}
+      errno=0;
+      return (texture_t)default_texture;
+    };
+    DO(!tmp){return fail("couldn't alloc temporary texture buffer");}
+    DO(!file){return fail("couldn't open texture file for read");}
+    int width=0, height=0, maxVal=0;
     char format=0;
-    FEXPECTS("P3",2){//segfaults i guess
-      DO(memcmp(tmp,"P6",2)){fflush(stdout);perror("unsupported file format: not PPM3 or PPM6");return default_texture;errno=0;}{
-        format=2;
-      }
-    }else{
-      format=1;
-    }
+    if(fread(tmp,1,2,file)!=2){return fail("texture file too short");}
+    if(!memcmp(tmp,"P3",2)){format=1;}
+    else if(!memcmp(tmp,"P6",2)){format=2;}
+    else{return fail("unsupported file format: not PPM3 or PPM6");}
     wspace(file,tmp);FGETI(width);
     wspace(file,tmp);FGETI(height);
     wspace(file,tmp);FGETI(maxVal);
+    DO((width<=0)||(height<=0)||(maxVal<=0)||(maxVal>65535)){return fail("invalid PPM dimensions or max value");}
     printf("%ix%i,%i\n",width,height,maxVal);
-    out.width=width;out.height=height;out.pixels=(unsigned char*)malloc(3*width*height);
+    size_t pixel_count=(size_t)width*(size_t)height;
+    DO(pixel_count>((size_t)-1)/3){return fail("texture is too large");}
+    out.width=width;out.height=height;out.pixels=(unsigned char*)malloc(3*pixel_count);
+    DO(!out.pixels){return fail("couldn't alloc texture pixels");}
     if(format==1){//ppm3
-      unsigned int r=0,g=0,b=0,j=0;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
-      while(!feof(file)&&(j<(width*height))){
+      unsigned int r=0,g=0,b=0;
+      for(size_t j=0;j<pixel_count;j++){
         wspace(file,tmp);FGETI(r);
         wspace(file,tmp);FGETI(g);
         wspace(file,tmp);FGETI(b);
-        out.pixels[j*3]  =r*255/maxVal;
-        out.pixels[j*3+1]=g*255/maxVal;
-        out.pixels[j*3+2]=b*255/maxVal;
-        j++;
+        out.pixels[j*3]  =(unsigned char)min((unsigned int)255,r*255/(unsigned int)maxVal);
+        out.pixels[j*3+1]=(unsigned char)min((unsigned int)255,g*255/(unsigned int)maxVal);
+        out.pixels[j*3+2]=(unsigned char)min((unsigned int)255,b*255/(unsigned int)maxVal);
       }
     }else if(format==2){//ppm6
-      wspace(file,tmp);
-      short unsigned int r,g,b;
-      unsigned j;
-      while(!feof(file)&&(j<(width*height))){
-#pragma GCC diagnostic pop
-        fread(&r,1+(maxVal>255),1,file);
-        fread(&g,1+(maxVal>255),1,file);
-        fread(&b,1+(maxVal>255),1,file);
-        out.pixels[j*3]  =r*255/maxVal;
-        out.pixels[j*3+1]=g*255/maxVal;
-        out.pixels[j*3+2]=b*255/maxVal;
-        j++;
+      int delimiter=fgetc(file);
+      while(delimiter=='#'){
+        do{delimiter=fgetc(file);}while((delimiter!='\n')&&(delimiter!=EOF));
+        delimiter=fgetc(file);
+      }
+      if((delimiter!=' ')&&(delimiter!='\n')&&(delimiter!='\r')&&(delimiter!='\t')&&(delimiter!=EOF)){ungetc(delimiter,file);}
+      bool wide_sample=maxVal>255;
+      for(size_t j=0;j<pixel_count;j++){
+        unsigned int rgb[3]{};
+        for(unsigned int c=0;c<3;c++){
+          int hi=fgetc(file);
+          DO(hi==EOF){return fail("unexpected end of P6 texture data");}
+          if(wide_sample){
+            int lo=fgetc(file);
+            DO(lo==EOF){return fail("unexpected end of P6 texture data");}
+            rgb[c]=((unsigned int)hi<<8)|(unsigned int)lo;
+          }else{
+            rgb[c]=(unsigned int)hi;
+          }
+        }
+        out.pixels[j*3]  =(unsigned char)min((unsigned int)255,rgb[0]*255/(unsigned int)maxVal);
+        out.pixels[j*3+1]=(unsigned char)min((unsigned int)255,rgb[1]*255/(unsigned int)maxVal);
+        out.pixels[j*3+2]=(unsigned char)min((unsigned int)255,rgb[2]*255/(unsigned int)maxVal);
       }
     }
     free(tmp);
     tmp=NULL;
-    DO(file){fclose(file);file=NULL;}else{fflush(stdout);perror("???");return default_texture;errno=0;}
+    fclose(file);
+    file=NULL;
     return out;
   }
 #define EXPCORDIE(N,C,N1) DO((buddyholly=fgetc(file))!=C){printf("%li:\'%c\':",ftell(file),buddyholly);fflush(stdout);ORDIE(N " " #C " " N1)}

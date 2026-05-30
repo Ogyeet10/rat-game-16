@@ -51,7 +51,7 @@ namespace gui {
 #else
   struct termios old_term_state{};
   struct termios cur_term_state{};
-  struct timeval input_timeout{0,0};//wait for NOTHING
+  struct timeval input_timeout{0,16000};//cap idle native loop around 60Hz
 #endif
 
   //signals to make sure we can ignore things we don't like, like someone telling the program to stop
@@ -67,7 +67,7 @@ namespace gui {
   struct winsize term_dims;//represents current terminal dimensions. has fields ws_row and ws_col. should change
 #endif
   char* term_buffer=NULL;
-  unsigned char* depth_buffer=NULL;
+  float* depth_buffer=NULL;
   color_t* color_buffer=NULL;
 #ifdef do_debug
   char* debug_buffer=NULL;
@@ -105,7 +105,7 @@ namespace gui {
     if(err){perror(err);}
     state|=STATE_ICLR;
 #else
-    BRKST(PMDS,printf("\x1b[c""\x1b""[?1049l\x1b[?25h");)//lowkirk don't know what the [c is for but
+    BRKST(PMDS,printf("\x1b[c""\x1b""[?7h\x1b[?1049l\x1b[?25h");)//lowkirk don't know what the [c is for but
     printf("CURING TERMINAL ILLNESS\n\r");//it breaks without it
     BRKST(SIGS,
       printf("\x1b""[0mrestoring sigset\n\r");
@@ -184,7 +184,7 @@ namespace gui {
     max_chars=term_dims.ws_col*term_dims.ws_row;
     term_buffer=(char*)realloc(term_buffer,max_chars);
     color_buffer=(color_t*)realloc(color_buffer,max_chars*sizeof(color_t));
-    depth_buffer=(unsigned char*)realloc(depth_buffer,max_chars);
+    depth_buffer=(float*)realloc(depth_buffer,max_chars*sizeof(float));
     DO(!term_buffer||!color_buffer||!depth_buffer)ORDIE("couldn't resize browser buffers")
     state|=STATE_TBUF|STATE_CBUF|STATE_DBUF;
   }
@@ -194,7 +194,7 @@ namespace gui {
 #ifdef __EMSCRIPTEN__
     resizeBrowserBuffers();
 #endif
-    for(scoord i=0;i<max_chars;i++){term_buffer[i]=' ';depth_buffer[i]=255;color_buffer[i]=default_color;}
+    for(scoord i=0;i<max_chars;i++){term_buffer[i]=' ';depth_buffer[i]=1.0f;color_buffer[i]=default_color;}
   }
 
   void init(){
@@ -212,7 +212,7 @@ namespace gui {
 
     //enable alternate screen buffer
     //https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797#common-private-modes
-    printf("\x1b[?1049h\x1b[?25l\x1b[48;2;0;0;0m\x1b[2J");
+    printf("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[48;2;0;0;0m\x1b[2J");
     state|=STATE_PMDS;
 
     //set various terminal flags
@@ -235,7 +235,7 @@ namespace gui {
 #define tryalloc(A,B,C,D) DO((A ## _buffer=(B)malloc(C))==NULL)ORDIE("couldn't allocate for " #A);state|=STATE_ ## D;
     tryalloc(term,char*,max_chars,TBUF);
     tryalloc(color,color_t*,max_chars,CBUF);
-    tryalloc(depth,unsigned char*,max_chars,DBUF);
+    tryalloc(depth,float*,max_chars*sizeof(float),DBUF);
     #ifdef do_debug
     tryalloc(debug,char*,term_dims.ws_col,BBUF);
     #endif
@@ -259,8 +259,11 @@ namespace gui {
 #ifdef __EMSCRIPTEN__
     return input_read!=input_write;
 #else
-    static fd_set fds;FD_SET(STDIN_FILENO,&fds);//ts shit is not thread safe probably
-    return select(STDIN_FILENO+1, &fds, NULL, NULL,&input_timeout);
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO,&fds);//ts shit is not thread safe probably
+    struct timeval timeout=input_timeout;
+    return select(STDIN_FILENO+1, &fds, NULL, NULL,&timeout)>0;
 #endif
   }
   char readInput(){
@@ -464,44 +467,63 @@ namespace gui {
       screen.innerHTML = html;
     },term_buffer,max_chars,term_dims.ws_col,color_buffer);
 #else
-    static const char frame_reset[]="\x1b[0m\x1b[48;2;0;0;0m\x1b[2J\x1b[0;0H";
-    DO(fwrite(frame_reset,1,sizeof(frame_reset)-1,stdout)<sizeof(frame_reset)-1)ORDIE("couldn't write control codes to terminal");
+    static const char frame_home[]="\x1b[0m\x1b[48;2;0;0;0m\x1b[H";
+    size_t out_cap=(max_chars*32)+(term_dims.ws_row*2)+sizeof(frame_home)+64;
+    size_t out_len=0;
+    char* out=(char*)malloc(out_cap);
+    DO(!out)ORDIE("couldn't allocate terminal frame buffer")
+    auto appendBytes=[&](const char* data,size_t len){
+      if(out_len+len>out_cap){
+        out_cap=(out_len+len)*2;
+        char* grown=(char*)realloc(out,out_cap);
+        DO(!grown)ORDIE("couldn't grow terminal frame buffer")
+        out=grown;
+      }
+      memcpy(out+out_len,data,len);
+      out_len+=len;
+    };
+    auto appendStr=[&](const char* data){appendBytes(data,strlen(data));};
+    appendBytes(frame_home,sizeof(frame_home)-1);
     color_t last_color_fg=color_buffer[0]&0x0F;//why the FUCK would he have bits 3 and 4 be
     color_t last_color_bg=color_buffer[0]&0xF0;//brightness instead of 3 and 7 like a normal person
-    scoord last_char=0;
     char* buf=(char*)malloc(20);
     buf[19]='\0';
-    fputs(ansi_fg(color_buffer[0],buf),stdout); // dont ignore the first color, becouse acctualy, we need these
-    fputs(ansi_bg(color_buffer[0],buf),stdout);
-    for(scoord i=1;i<max_chars;i++){//could def use optimization to minimize color calls (combine fg & bg,
-      bool fg_change=((color_buffer[i]&0x0F)!=last_color_fg);//minimize write ops)
-      bool bg_change=((color_buffer[i]&0xF0)!=last_color_bg);//keep prev frame buffer and move cursor around
-      if(fg_change||bg_change){//to minimize bytes written when only changing a bit of screen
-        fwrite(term_buffer+last_char,1,i-last_char,stdout);
-        fputs("\x1b[22m",stdout);
-        if(fg_change){
-          last_color_fg=color_buffer[i];
-          if(bg_change){
-            fputs(ansi_fg(color_buffer[i],buf),stdout);
-            fputs(ansi_bg(color_buffer[i],buf),stdout);
-            fseek(stdout,-1,SEEK_CUR);//trailing \0 could be prevented by ansi_fg returning a thing
-            last_color_bg=color_buffer[i];//would look like fwrite(buf,1,ansi_fg(...),stdout)
-          }else{//where the ansi_fg and bg functions return the amount of chars to write
-            fputs(ansi_fg(color_buffer[i],buf),stdout);
+    appendStr(ansi_fg(color_buffer[0],buf)); // dont ignore the first color, becouse acctualy, we need these
+    appendStr(ansi_bg(color_buffer[0],buf));
+    for(scoord y=0;y<term_dims.ws_row;y++){
+      scoord row_start=y*term_dims.ws_col;
+      scoord last_char=row_start;
+      for(scoord x=0;x<term_dims.ws_col;x++){
+        scoord i=row_start+x;
+        bool fg_change=((color_buffer[i]&0x0F)!=last_color_fg);//minimize write ops)
+        bool bg_change=((color_buffer[i]&0xF0)!=last_color_bg);//keep prev frame buffer and move cursor around
+        if(fg_change||bg_change){//to minimize bytes written when only changing a bit of screen
+          appendBytes(term_buffer+last_char,i-last_char);
+          appendStr("\x1b[22m");
+          if(fg_change){
+            last_color_fg=color_buffer[i]&0x0F;
+            if(bg_change){
+              appendStr(ansi_fg(color_buffer[i],buf));
+              appendStr(ansi_bg(color_buffer[i],buf));
+              last_color_bg=color_buffer[i]&0xF0;//would look like fwrite(buf,1,ansi_fg(...),stdout)
+            }else{//where the ansi_fg and bg functions return the amount of chars to write
+              appendStr(ansi_fg(color_buffer[i],buf));
+            }
+          }else{
+            if(bg_change){
+              appendStr(ansi_bg(color_buffer[i],buf));
+              last_color_bg=color_buffer[i]&0xF0;
+            }
           }
-        }else{
-          if(bg_change){
-            fputs(ansi_bg(color_buffer[i],buf),stdout);
-            fseek(stdout,-1,SEEK_CUR);
-            last_color_bg=color_buffer[i];
-          }
+          last_char=i;
         }
-        last_char=i;
       }
+      appendBytes(term_buffer+last_char,row_start+term_dims.ws_col-last_char);
+      if(y+1<term_dims.ws_row){appendStr("\r\n");}
     }
-    fwrite(term_buffer+last_char,1,max_chars-last_char,stdout);
+    DO(fwrite(out,1,out_len,stdout)<out_len)ORDIE("couldn't write terminal frame")
+    free(out);
     free(buf);
-    // fseek(stdout,-1,SEEK_CUR);
     fflush(stdout);
 #endif
   }

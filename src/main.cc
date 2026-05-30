@@ -37,8 +37,6 @@ assets::font_t f_avatar;
 
 assets::asset3d_t scene;
 
-assets::sprite_t sprite{};
-
 gui::menu_t mainmenu;
 gui::menu_t pausemenu;
 
@@ -60,7 +58,6 @@ void drawWorld(){
     for(unsigned int i=0;i<scene.mesh.tricount;i++){
       gui::drawMTri(scene.mesh.tris[i],scene.textures[scene.tex_binds[i]]);
     }
-    if(sprite.chars&&sprite.pixels){gui::putSprite(&sprite,0,0);}
   }
 }
 void buttonContinue(){
@@ -97,10 +94,6 @@ void loadModels(){
   puts("LOADING MODELS");
   scene=assets::readAsset3d("./assets/newscene.rgmdl");//ari i'm going to ear you
 }
-void loadSprites(){
-  puts("LOADING SPRITES");
-  sprite=assets::readRGVTX("./assets/sprite/hand.rgvtx",gui::term_dims.ws_col,gui::term_dims.ws_row);
-}
 void loadMenus(){
   mainmenu={
     .sizex=0,.sizey=0,
@@ -135,6 +128,19 @@ unsigned char rotamnt=16;
 float rotamntrad = (rotamnt/128.0f)*M_PI;
 float rottrck=0;
 
+void selectMenuPrev(){
+  if(gui::selected_menu&&gui::selected_menu->btncount){gui::selected_btn=(gui::selected_btn+gui::selected_menu->btncount-1)%gui::selected_menu->btncount;}
+}
+void selectMenuNext(){
+  if(gui::selected_menu&&gui::selected_menu->btncount){gui::selected_btn=(gui::selected_btn+1)%gui::selected_menu->btncount;}
+}
+
+void clampCameraSettings(){
+  mesh::fov=max(30.0f,min(120.0f,mesh::fov));
+  mesh::nearplanex=max(0.05f,min(mesh::nearplanex,mesh::farplanex-0.5f));
+  mesh::farplanex=max(mesh::nearplanex+0.5f,min(80.0f,mesh::farplanex));
+}
+
 void drawCurrentFrame(){
   clock_t t=clock();
   gui::clear_scr();
@@ -149,19 +155,30 @@ void drawCurrentFrame(){
 
 void tick(){
   if(!game_running){return;}
+#ifndef __EMSCRIPTEN__
+  if(!gui::hasInput()){return;}
+#endif
   char c=gui::readInput();
   if(c=='q'){quit();return;}
   switch(c){//escapey bits. add more later probably. note that tmux is doing strange things to us
-    case '\e':escapes|='\x01';return;
+    case '\e':
+      if(gui::hasInput()){
+        escapes|='\x01';
+        return;
+      }
+      gamestate.paused=!gamestate.paused;
+      drawCurrentFrame();
+      escapes=0;
+      return;
     case '[' :if((escapes&'\x03')=='\x01'){escapes|='\x02';return;}else{//am i getting ear'd for this one
-      if(gui::selected_menu&&gui::selected_menu->btncount){gui::selected_btn=(gui::selected_btn+gui::selected_menu->btncount-1)%gui::selected_menu->btncount;}
+      selectMenuPrev();
       break;
     }
   }
   if((escapes&'\x03')=='\x03'){
     switch(c){
-      case 'A':mesh::farplanex++;break;
-      case 'B':mesh::farplanex--;break;
+      case 'A':if(gui::selected_menu){selectMenuPrev();}else{mesh::farplanex+=1.0f;clampCameraSettings();}break;
+      case 'B':if(gui::selected_menu){selectMenuNext();}else{mesh::farplanex-=1.0f;clampCameraSettings();}break;
       case 'C':mesh::camera_rotation.z-=rotamnt;rottrck+=rotamntrad;break;//left
       case 'D':mesh::camera_rotation.z+=rotamnt;rottrck-=rotamntrad;break;//right
     }
@@ -172,14 +189,18 @@ void tick(){
     escapes=0;
   }else{
     switch(c){
-      case 'w':if(!gui::selected_menu){mesh::camera_position.x+=cos(rottrck);mesh::camera_position.y+=sin(rottrck);}break;//ari i just looked at these
-      case 's':if(!gui::selected_menu){mesh::camera_position.x-=cos(rottrck);mesh::camera_position.y-=sin(rottrck);}break;//,,, not a big fan
+      case 'w':if(gui::selected_menu){selectMenuPrev();}else{mesh::camera_position.x+=cos(rottrck);mesh::camera_position.y+=sin(rottrck);}break;//ari i just looked at these
+      case 's':if(gui::selected_menu){selectMenuNext();}else{mesh::camera_position.x-=cos(rottrck);mesh::camera_position.y-=sin(rottrck);}break;//,,, not a big fan
       case 'd':if(!gui::selected_menu){mesh::camera_position.x-=sin(rottrck);mesh::camera_position.y+=cos(rottrck);}break;//either put everything on radians
       case 'a':if(!gui::selected_menu){mesh::camera_position.x+=sin(rottrck);mesh::camera_position.y-=cos(rottrck);}break;//or dont, PICK ONE
-      case ',':mesh::camera_position.z++;break;
-      case '.':mesh::camera_position.z--;break;
+      case ',':if(!gui::selected_menu){mesh::camera_position.z++;}break;
+      case '.':if(!gui::selected_menu){mesh::camera_position.z--;}break;
+      case '-':if(!gui::selected_menu){mesh::fov-=5.0f;clampCameraSettings();}break;
+      case '=':if(!gui::selected_menu){mesh::fov+=5.0f;clampCameraSettings();}break;
+      case 'n':if(!gui::selected_menu){mesh::nearplanex-=0.05f;clampCameraSettings();}break;
+      case 'm':if(!gui::selected_menu){mesh::nearplanex+=0.05f;clampCameraSettings();}break;
       case 'e':logmisc=!logmisc;break;
-      case ']':if(gui::selected_menu&&gui::selected_menu->btncount){gui::selected_btn=(gui::selected_btn+1)%gui::selected_menu->btncount;}break;
+      case ']':selectMenuNext();break;
       case '\r':
         if(gui::selected_menu&&gui::selected_menu->funcs&&gui::selected_menu->funcs[gui::selected_btn]){
           gui::selected_menu->funcs[gui::selected_btn]();
@@ -207,7 +228,6 @@ int main() {
   loadMenus();
   gamestate.drawFunc=drawMainMenu;
   gui::init();
-  loadSprites();
   gui::selected_menu=&mainmenu;
   gui::selected_btn=0;
   drawCurrentFrame();
