@@ -55,9 +55,11 @@ void drawWorld(){
     gui::putMenu(&pausemenu,0,0);
   }else{
     gui::selected_menu=NULL;
+    gui::beginShapeFrame();
     for(unsigned int i=0;i<scene.mesh.tricount;i++){
       gui::drawMTri(scene.mesh.tris[i],scene.textures[scene.tex_binds[i]]);
     }
+    gui::resolveShapeFrame();
   }
 }
 void buttonContinue(){
